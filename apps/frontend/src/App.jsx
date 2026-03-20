@@ -3,46 +3,23 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Dashboard from './Dashboard';
 import Monitoring from './Monitoring';
 import Analytics from './Analytics';
-import Login from './Login';
 import LandingPage from './LandingPage';
-import { clearSession, isAuthenticated } from './lib/auth';
-
-// ── Auth Guard: Redirects unauthenticated users to /login ──────────
-function ProtectedRoute({ children }) {
-  if (!isAuthenticated()) return <Navigate to="/login" replace />;
-  return children;
-}
+// Note: We can ignore ProtectedRoute and Login for the submission build
 
 export default function App() {
-  const handleLogout = () => {
-    clearSession();
-    window.location.href = '/login'; 
-  };
-
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
+        {/* Main Entry Points */}
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/login" element={<Dashboard />} />
+        
+        {/* Technical Showcase Routes (Now Public) */}
+        <Route path="/monitoring" element={<Monitoring />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/about" element={<LandingPage />} />
 
-        <Route path="/app" element={
-          <ProtectedRoute>
-            <Dashboard onLogout={handleLogout} />
-          </ProtectedRoute>
-        } />
-        <Route path="/app/monitoring" element={
-          <ProtectedRoute>
-            <Monitoring />
-          </ProtectedRoute>
-        } />
-        <Route path="/app/analytics" element={
-          <ProtectedRoute>
-            <Analytics />
-          </ProtectedRoute>
-        } />
-        <Route path="/monitoring" element={<Navigate to="/app/monitoring" replace />} />
-        <Route path="/analytics" element={<Navigate to="/app/analytics" replace />} />
-
+        {/* Catch-all: Redirect any stray paths to the Dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
