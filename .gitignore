@@ -320,3 +320,7 @@ k8s/secrets.yaml
 **/terraform.tfstate
 **/terraform.tfstate.backup
 **/.terraform/
+
+# Explicitly block the GCP key you created in the guide
+verirag-key.json
+*-key.json
