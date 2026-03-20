@@ -211,7 +211,7 @@ def create_app():
         @app.post("/query", response_model=QueryResponse)
         async def query(request: QueryRequest):
             """Process a query through the VeriRAG agent"""
-            logger.info(f"📨 Received query: {request.message}")
+            safe_msg = request.message.replace("\n", " ").replace("\r", " ")[:100]; logger.info(f"📨 Received query (sanitized): {safe_msg}...")
             
             result = await agent.process_query(request.message)
             

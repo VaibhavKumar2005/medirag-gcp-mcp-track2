@@ -278,7 +278,7 @@ async def main():
     logger.info(f"   Tools: {', '.join([t.name for t in mcp.tools.values()])}")
     
     # Run server
-    async with mcp.run_server() as server:
+    async with mcp.run_server():
         logger.info("✅ MCP Server running and ready for connections")
 
 

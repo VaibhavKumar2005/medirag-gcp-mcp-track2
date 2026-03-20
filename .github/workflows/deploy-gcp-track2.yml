@@ -1,4 +1,4 @@
-name: Deploy VeriRAG to Google Cloud Run (Track 2)
+name: Deploy VeriRAG Full-Stack to Google Cloud (Track 2)
 
 on:
   push:
@@ -8,8 +8,6 @@ on:
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GCP_REGION: us-central1
-  MCP_SERVER_SERVICE: verirag-mcp-server
-  ADK_AGENT_SERVICE: verirag-adk-agent
 
 jobs:
   setup:
@@ -17,259 +15,97 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Validate GCP secrets
+      - name: Validate Secrets
         run: |
-          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
-            echo "❌ GCP_PROJECT_ID not set"
+          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ] || [ -z "${{ secrets.GOOGLE_CLOUD_SA_JSON }}" ]; then
+            echo "❌ Missing mandatory GCP secrets!"
             exit 1
           fi
-          if [ -z "${{ secrets.GOOGLE_CLOUD_SA_JSON }}" ]; then
-            echo "❌ GOOGLE_CLOUD_SA_JSON not set"
-            exit 1
-          fi
-          echo "✅ GCP secrets validated"
+          echo "✅ GCP secrets validated."
 
   deploy-mcp-server:
-    name: Deploy MCP Server to Cloud Run
+    name: Deploy MCP Server (Backend)
     runs-on: ubuntu-latest
     needs: setup
+    outputs:
+      mcp_url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_SA_JSON }}
+      - uses: google-github-actions/setup-gcloud@v1
       
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-      
-      - name: Configure Docker for GCR
+      - name: Deploy to Cloud Run
+        id: deploy
         run: |
-          gcloud auth configure-docker gcr.io
-          echo "✅ Docker configured for GCR"
-      
-      - name: Build MCP Server image
-        run: |
-          echo "🔨 Building MCP Server image..."
-          docker build -f apps/backend/Dockerfile \
-            -t gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:${{ github.sha }} \
-            -t gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:latest \
-            -t gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:track2 \
-            apps/backend
-          echo "✅ Image built successfully"
-      
-      - name: Push MCP Server image to GCR
-        run: |
-          echo "📤 Pushing MCP Server image to GCR..."
-          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:${{ github.sha }}
-          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:latest
-          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:track2
-          echo "✅ Image pushed successfully"
-      
-      - name: Deploy MCP Server to Cloud Run
-        id: deploy-mcp
-        run: |
-          echo "🚀 Deploying MCP Server to Cloud Run..."
-          
-          gcloud run deploy ${{ env.MCP_SERVER_SERVICE }} \
-            --image gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-mcp-server:latest \
-            --platform managed \
+          gcloud run deploy verirag-mcp-server \
+            --source ./apps/backend \
             --region ${{ env.GCP_REGION }} \
             --allow-unauthenticated \
             --memory 2Gi \
-            --cpu 2 \
-            --timeout 3600 \
             --port 8000 \
-            --project ${{ env.GCP_PROJECT_ID }}
-          
-          # Get the service URL
-          SERVICE_URL=$(gcloud run services describe ${{ env.MCP_SERVER_SERVICE }} \
-            --platform managed \
-            --region ${{ env.GCP_REGION }} \
-            --project ${{ env.GCP_PROJECT_ID }} \
-            --format 'value(status.url)')
-          
-          echo "mcp_server_url=$SERVICE_URL" >> $GITHUB_OUTPUT
-          echo "✅ MCP Server deployed successfully"
-          echo "   URL: $SERVICE_URL"
-      
-      - name: Test MCP Server health
-        run: |
-          echo "🧪 Testing MCP Server..."
-          SERVICE_URL=${{ steps.deploy-mcp.outputs.mcp_server_url }}
-          
-          # Give it a moment to start
-          sleep 5
-          
-          # Test health endpoint
-          if curl -s "$SERVICE_URL/health" > /dev/null 2>&1; then
-            echo "✅ MCP Server health check passed"
-          else
-            echo "⚠️  MCP Server health check failed (may still be starting)"
-          fi
-    
-    outputs:
-      mcp_server_url: ${{ steps.deploy-mcp.outputs.mcp_server_url }}
+            --format 'value(status.address.url)' > mcp_url.txt
+          echo "url=$(cat mcp_url.txt)" >> $GITHUB_OUTPUT
 
   deploy-adk-agent:
-    name: Deploy ADK Agent to Cloud Run
+    name: Deploy Gemini ADK Agent
     runs-on: ubuntu-latest
     needs: deploy-mcp-server
+    outputs:
+      agent_url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+      - uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_SA_JSON }}
+      - uses: google-github-actions/setup-gcloud@v1
       
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-      
-      - name: Configure Docker for GCR
+      - name: Deploy to Cloud Run
+        id: deploy
         run: |
-          gcloud auth configure-docker gcr.io
-          echo "✅ Docker configured for GCR"
-      
-      - name: Create ADK Agent Dockerfile
-        run: |
-          mkdir -p verirag-adk-agent
-          
-          cat > verirag-adk-agent/Dockerfile << 'EOF'
-          FROM python:3.12-slim
-          
-          WORKDIR /app
-          
-          # Install dependencies
-          COPY requirements.txt .
-          RUN pip install --no-cache-dir -r requirements.txt
-          
-          # Copy agent code
-          COPY verirag_adk_agent.py .
-          
-          # Health check
-          HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-            CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
-          
-          # Run agent
-          ENV PORT=8080
-          CMD ["python", "verirag_adk_agent.py", "serve"]
-          EOF
-          
-          echo "✅ Dockerfile created"
-      
-      - name: Create ADK Agent requirements.txt
-        run: |
-          cat > verirag-adk-agent/requirements.txt << 'EOF'
-          fastapi==0.104.1
-          uvicorn[standard]==0.24.0
-          pydantic==2.4.2
-          google-adk-agents>=0.1.0
-          google-cloud-aiplatform>=1.40.0
-          requests==2.31.0
-          EOF
-          
-          echo "✅ Requirements.txt created"
-      
-      - name: Copy agent code
-        run: |
-          cp /mnt/user-data/outputs/verirag_adk_agent.py verirag-adk-agent/ || \
-          cp outputs/verirag_adk_agent.py verirag-adk-agent/ || \
-          echo "⚠️  Agent code not found in outputs"
-      
-      - name: Build ADK Agent image
-        run: |
-          echo "🔨 Building ADK Agent image..."
-          docker build \
-            -t gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:${{ github.sha }} \
-            -t gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:latest \
-            -t gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:track2 \
-            verirag-adk-agent
-          echo "✅ Image built successfully"
-      
-      - name: Push ADK Agent image to GCR
-        run: |
-          echo "📤 Pushing ADK Agent image to GCR..."
-          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:${{ github.sha }}
-          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:latest
-          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:track2
-          echo "✅ Image pushed successfully"
-      
-      - name: Deploy ADK Agent to Cloud Run
-        id: deploy-agent
-        run: |
-          echo "🚀 Deploying ADK Agent to Cloud Run..."
-          
-          MCP_SERVER_URL=${{ needs.deploy-mcp-server.outputs.mcp_server_url }}
-          
-          gcloud run deploy ${{ env.ADK_AGENT_SERVICE }} \
-            --image gcr.io/${{ env.GCP_PROJECT_ID }}/verirag-adk-agent:latest \
-            --platform managed \
+          gcloud run deploy verirag-adk-agent \
+            --source ./verirag-adk-agent \
             --region ${{ env.GCP_REGION }} \
             --allow-unauthenticated \
-            --memory 2Gi \
-            --cpu 2 \
-            --timeout 3600 \
+            --set-env-vars MCP_SERVER_URL=${{ needs.deploy-mcp-server.outputs.mcp_url }} \
             --port 8080 \
-            --set-env-vars MCP_SERVER_URL=$MCP_SERVER_URL \
-            --project ${{ env.GCP_PROJECT_ID }}
-          
-          # Get the service URL
-          SERVICE_URL=$(gcloud run services describe ${{ env.ADK_AGENT_SERVICE }} \
-            --platform managed \
-            --region ${{ env.GCP_REGION }} \
-            --project ${{ env.GCP_PROJECT_ID }} \
-            --format 'value(status.url)')
-          
-          echo "adk_agent_url=$SERVICE_URL" >> $GITHUB_OUTPUT
-          echo "✅ ADK Agent deployed successfully"
-          echo "   URL: $SERVICE_URL"
-          echo "   MCP Server: $MCP_SERVER_URL"
+            --format 'value(status.address.url)' > agent_url.txt
+          echo "url=$(cat agent_url.txt)" >> $GITHUB_OUTPUT
+
+  deploy-frontend:
+    name: Deploy React Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-adk-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_SA_JSON }}
+      - uses: google-github-actions/setup-gcloud@v1
       
-      - name: Test ADK Agent health
+      - name: Deploy to Cloud Run
         run: |
-          echo "🧪 Testing ADK Agent..."
-          SERVICE_URL=${{ steps.deploy-agent.outputs.adk_agent_url }}
-          
-          # Give it a moment to start
-          sleep 5
-          
-          # Test health endpoint
-          if curl -s "$SERVICE_URL/health" > /dev/null 2>&1; then
-            echo "✅ ADK Agent health check passed"
-          else
-            echo "⚠️  ADK Agent health check failed (may still be starting)"
-          fi
-    
-    outputs:
-      adk_agent_url: ${{ steps.deploy-agent.outputs.adk_agent_url }}
+          gcloud run deploy verirag-frontend \
+            --source ./apps/frontend \
+            --region ${{ env.GCP_REGION }} \
+            --allow-unauthenticated \
+            --set-env-vars VITE_API_URL=${{ needs.deploy-adk-agent.outputs.agent_url }} \
+            --port 80
+          echo "✅ Frontend is live!"
 
   post-deployment:
-    name: Post-Deployment Verification
+    name: Final Verification
     runs-on: ubuntu-latest
     needs: [deploy-mcp-server, deploy-adk-agent]
     if: always()
     steps:
-      - name: Print deployment summary
+      - name: Deployment Summary
         run: |
           echo "=========================================="
-          echo "✅ VeriRAG Track 2 Deployment Complete!"
+          echo "🎯 VeriRAG Track 2 Submission Live!"
           echo "=========================================="
-          echo ""
-          echo "📍 Deployed Services:"
-          echo "   MCP Server:  ${{ needs.deploy-mcp-server.outputs.mcp_server_url }}"
-          echo "   ADK Agent:   ${{ needs.deploy-adk-agent.outputs.adk_agent_url }}"
-          echo ""
-          echo "🧪 Test the deployment:"
-          echo ""
-          echo "   Health Check:"
-          echo "   curl ${{ needs.deploy-adk-agent.outputs.adk_agent_url }}/health"
-          echo ""
-          echo "   Query Example:"
-          echo "   curl -X POST ${{ needs.deploy-adk-agent.outputs.adk_agent_url }}/query \\"
-          echo "     -H 'Content-Type: application/json' \\"
-          echo "     -d '{\"message\": \"What documents are available?\"}'"
-          echo ""
+          echo "Backend (MCP): ${{ needs.deploy-mcp-server.outputs.mcp_url }}"
+          echo "Agent (ADK):   ${{ needs.deploy-adk-agent.outputs.agent_url }}"
+          echo "Frontend UI:   (Check Cloud Run Console)"
           echo "=========================================="
