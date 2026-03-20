@@ -1,442 +1,295 @@
 """
-VeriRAG MCP Server - Model Context Protocol Server
-Exposes VeriRAG RAG and document management capabilities to Claude Desktop and other MCP clients.
-
-Usage:
-  1. Install fastmcp: pip install fastmcp
-  2. Add to Claude Desktop config (~/.config/Claude/claude_desktop_config.json on Mac/Linux):
-     {
-       "mcpServers": {
-         "verirag": {
-           "command": "python",
-           "args": ["path/to/mcp_server.py"]
-         }
-       }
-     }
-  3. Restart Claude Desktop
-  4. Use @verirag in Claude to access tools
-
-This MCP server requires:
-- VeriRAG backend running (http://localhost:8000 by default)
-- Bearer token for authentication (set VERIRAG_API_TOKEN env var)
+VeriRAG MCP Server
+Exposes RAG tools via Model Context Protocol for Track 2 submission
 """
 
 import os
-import json
-import logging
-from typing import Optional
-import asyncio
-import httpx
+import sys
+import django
+from typing import Any
+
+# Setup Django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "rag_backend.settings")
+sys.path.insert(0, os.path.dirname(__file__))
+django.setup()
 
 from fastmcp import FastMCP
+from ai_engine.models import Document, DocumentChunk
+from ai_engine.rag_logic import RAGEngine
+import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server
-mcp = FastMCP("verirag-librarian")
+mcp = FastMCP(
+    name="verirag-rag-server",
+    version="1.0.0",
+)
 
-# Configuration
-VERIRAG_API_BASE = os.environ.get("VERIRAG_API_BASE", "http://localhost:8000/api")
-VERIRAG_API_TOKEN = os.environ.get("VERIRAG_API_TOKEN", "")  # Set this in your environment
-DEFAULT_USER_ID = int(os.environ.get("VERIRAG_DEFAULT_USER_ID", "1"))
+# Initialize RAG engine
+try:
+    rag_engine = RAGEngine()
+    logger.info("✅ RAG Engine initialized successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize RAG engine: {e}")
+    rag_engine = None
 
-# HTTP client configuration
-TIMEOUT = httpx.Timeout(30.0)
-HEADERS = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {VERIRAG_API_TOKEN}" if VERIRAG_API_TOKEN else "",
-}
-
-
-# ============================================================================
-# CORE RAG TOOLS
-# ============================================================================
 
 @mcp.tool()
-async def query_library(
-    question: str,
-    user_id: int = DEFAULT_USER_ID,
-    include_citations: bool = True,
-) -> dict:
+def search_documents(query: str, top_k: int = 5) -> dict:
     """
-    Query the VeriRAG document library with hallucination prevention.
-    
-    This tool searches through your uploaded documents and returns a faithful answer
-    with automatic hallucination detection. If confidence is low, it regenerates
-    with a backup model (Groq/Llama-3) for conservative verification.
+    Search documents using semantic similarity.
     
     Args:
-        question: Your question about the documents (e.g., "What are the key findings?")
-        user_id: User ID (defaults to 1 for single-user setup)
-        include_citations: Include source citations and evidence items
-        
+        query: Search query
+        top_k: Number of top results to return (default: 5, max: 20)
+    
     Returns:
-        dict with answer, faithfulness_score, citations, and evidence items
+        Dictionary with search results
     """
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        try:
-            response = await client.post(
-                f"{VERIRAG_API_BASE}/query/",
-                json={
-                    "query": question,
-                    "user_id": user_id,
-                },
-                headers=HEADERS,
-            )
-            response.raise_for_status()
-            result = response.json()
-            
-            # Extract key fields for cleaner output
-            return {
-                "answer": result.get("answer", ""),
-                "faithfulness_score": result.get("faithfulness_score", 0),
-                "faithfulness_status": "✅ HIGH" if result.get("faithfulness_score", 0) >= 0.7
-                    else "⚠️ MEDIUM" if result.get("faithfulness_score", 0) >= 0.5
-                    else "❌ LOW",
-                "model_used": result.get("model_used", "unknown"),
-                "verification_passed": result.get("verification_passed", False),
-                "explanation": result.get("explanation", ""),
-                "source_citation": result.get("source_citation", "No sources cited"),
-                "evidence_items": result.get("evidence_items", []) if include_citations else [],
-                "context_chunks": result.get("context_chunks_used", 0),
-            }
-        except httpx.HTTPError as e:
-            return {
-                "error": f"Failed to query VeriRAG API: {str(e)}",
-                "suggestion": "Ensure VeriRAG backend is running and VERIRAG_API_TOKEN is set",
-            }
+    if not rag_engine:
+        return {"error": "RAG engine not initialized", "results": []}
+    
+    try:
+        # Validate inputs
+        top_k = min(int(top_k), 20)  # Cap at 20
+        top_k = max(1, top_k)  # Min 1
+        
+        logger.info(f"🔍 Searching documents for query: '{query}' (top_k={top_k})")
+        
+        # Call RAG engine search
+        results = rag_engine.search(query, top_k=top_k)
+        
+        # Format results
+        formatted_results = []
+        for doc, score in results:
+            formatted_results.append({
+                "document_id": str(doc.id),
+                "title": doc.title,
+                "content_preview": doc.file.name if doc.file else "N/A",
+                "relevance_score": float(score),
+                "created_at": doc.created_at.isoformat() if doc.created_at else None
+            })
+        
+        return {
+            "query": query,
+            "results_count": len(formatted_results),
+            "results": formatted_results,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Search error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "query": query,
+            "results": [],
+            "status": "error"
+        }
 
 
 @mcp.tool()
-async def get_document_status(
-    document_id: int,
-    user_id: int = DEFAULT_USER_ID,
-) -> dict:
+def rag_query(question: str, use_context: bool = True) -> dict:
     """
-    Check the indexing status and progress of a document.
-    
-    Use this to monitor document ingestion progress. Documents go through:
-    1. PENDING: Waiting to be processed
-    2. INDEXING: Currently being embedded and stored
-    3. COMPLETE: Ready for queries
-    4. FAILED: Indexing encountered an error
+    Full RAG inference - retrieves context and generates answer.
     
     Args:
-        document_id: The ID of the document to check
-        user_id: User ID (defaults to 1 for single-user setup)
-        
+        question: Question to answer
+        use_context: Whether to use retrieved context (default: True)
+    
     Returns:
-        dict with status, progress, and error if any
+        Dictionary with generated answer and sources
     """
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        try:
-            response = await client.get(
-                f"{VERIRAG_API_BASE}/documents/{document_id}/",
-                headers=HEADERS,
-            )
-            response.raise_for_status()
-            doc = response.json()
+    if not rag_engine:
+        return {"error": "RAG engine not initialized", "answer": ""}
+    
+    try:
+        logger.info(f"❓ Answering question: '{question}' (use_context={use_context})")
+        
+        if use_context:
+            # Retrieve context
+            context_docs = rag_engine.search(question, top_k=3)
+            context = "\n\n".join([f"[{doc.title}]: {doc.file.name}" 
+                                   for doc, _ in context_docs])
             
-            return {
-                "document_id": doc.get("id", document_id),
-                "title": doc.get("title", "Unknown"),
-                "status": doc.get("status", "unknown"),
-                "progress_percent": doc.get("progress_percent", 0),
-                "processed_chunks": doc.get("processed_chunks", 0),
-                "total_chunks": doc.get("total_chunks", 0),
-                "processed": doc.get("processed", False),
-                "created_at": doc.get("created_at", ""),
-                "last_error": doc.get("last_error", ""),
-                "user_id": doc.get("user_id", user_id),
-            }
-        except httpx.HTTPError as e:
-            return {
-                "error": f"Failed to get document status: {str(e)}",
-                "document_id": document_id,
-            }
+            # Generate answer with context
+            answer = rag_engine.generate_answer(question, context)
+            
+            sources = [{"doc_id": str(doc.id), "title": doc.title} 
+                      for doc, _ in context_docs]
+        else:
+            # Generate answer without context
+            answer = rag_engine.generate_answer(question, None)
+            sources = []
+        
+        return {
+            "question": question,
+            "answer": answer,
+            "sources_count": len(sources),
+            "sources": sources,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ RAG query error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "question": question,
+            "answer": "",
+            "status": "error"
+        }
 
 
 @mcp.tool()
-async def list_documents(
-    user_id: int = DEFAULT_USER_ID,
-) -> dict:
+def list_documents() -> dict:
     """
-    List all documents uploaded by a user.
+    List all uploaded documents.
     
-    Returns a summary of all documents: their titles, ingestion status,
-    chunk counts, and created dates. Use this to see what you can query.
+    Returns:
+        Dictionary with list of all documents
+    """
+    try:
+        docs = Document.objects.all().order_by('-created_at')
+        
+        documents_list = []
+        for doc in docs:
+            chunk_count = doc.documentchunk_set.count()
+            documents_list.append({
+                "id": str(doc.id),
+                "title": doc.title,
+                "file_name": doc.file.name if doc.file else "N/A",
+                "file_size_kb": doc.file.size / 1024 if doc.file else 0,
+                "chunk_count": chunk_count,
+                "status": doc.status if hasattr(doc, 'status') else "processed",
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            })
+        
+        logger.info(f"📚 Listed {len(documents_list)} documents")
+        
+        return {
+            "total_documents": len(documents_list),
+            "documents": documents_list,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ List documents error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "total_documents": 0,
+            "documents": [],
+            "status": "error"
+        }
+
+
+@mcp.tool()
+def get_document_chunks(doc_id: str, limit: int = 10) -> dict:
+    """
+    Get text chunks from a specific document.
     
     Args:
-        user_id: User ID (defaults to 1 for single-user setup)
+        doc_id: Document ID
+        limit: Maximum chunks to return (default: 10, max: 50)
+    
+    Returns:
+        Dictionary with document chunks
+    """
+    try:
+        # Validate inputs
+        limit = min(int(limit), 50)  # Cap at 50
+        limit = max(1, limit)  # Min 1
         
-    Returns:
-        dict with list of documents and summary statistics
-    """
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        try:
-            response = await client.get(
-                f"{VERIRAG_API_BASE}/documents/",
-                params={"user_id": user_id},
-                headers=HEADERS,
-            )
-            response.raise_for_status()
-            documents = response.json()
-            
-            # Calculate statistics
-            total_docs = len(documents)
-            completed_docs = sum(1 for d in documents if d.get("processed"))
-            total_chunks = sum(d.get("total_chunks", 0) for d in documents)
-            
-            # Format document list
-            doc_list = []
-            for doc in documents:
-                doc_list.append({
-                    "id": doc.get("id"),
-                    "title": doc.get("title", "Unknown"),
-                    "status": doc.get("status", "unknown"),
-                    "chunks": {
-                        "processed": doc.get("processed_chunks", 0),
-                        "total": doc.get("total_chunks", 0),
-                    },
-                    "progress_percent": doc.get("progress_percent", 0),
-                    "created": doc.get("created_at", ""),
-                })
-            
-            return {
-                "documents": doc_list,
-                "summary": {
-                    "total_documents": total_docs,
-                    "ready_for_query": completed_docs,
-                    "total_chunks": total_chunks,
-                    "percent_complete": (completed_docs / total_docs * 100) if total_docs > 0 else 0,
-                },
-            }
-        except httpx.HTTPError as e:
-            return {
-                "error": f"Failed to list documents: {str(e)}",
-                "suggestion": "Ensure VeriRAG backend is running",
-            }
-
-
-# ============================================================================
-# ADVANCED TOOLS
-# ============================================================================
-
-@mcp.tool()
-async def batch_query(
-    questions: list[str],
-    user_id: int = DEFAULT_USER_ID,
-) -> dict:
-    """
-    Run multiple queries in batch and return aggregated results.
-    
-    Useful for:
-    - Evaluating multiple aspects of your documents
-    - Gathering data for analysis or reports
-    - Testing comprehensiveness of document coverage
-    
-    Args:
-        questions: List of questions to ask (max 10 recommended)
-        user_id: User ID (defaults to 1 for single-user setup)
+        doc = Document.objects.get(id=doc_id)
+        chunks = doc.documentchunk_set.all()[:limit]
         
-    Returns:
-        dict with results for each question and aggregate statistics
-    """
-    results = []
-    faithfulness_scores = []
-    
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        for i, question in enumerate(questions):
-            try:
-                response = await client.post(
-                    f"{VERIRAG_API_BASE}/query/",
-                    json={
-                        "query": question,
-                        "user_id": user_id,
-                    },
-                    headers=HEADERS,
-                )
-                response.raise_for_status()
-                result = response.json()
-                
-                faithfulness_scores.append(result.get("faithfulness_score", 0))
-                results.append({
-                    "question_index": i,
-                    "question": question,
-                    "answer": result.get("answer", "")[:200] + "..." if len(result.get("answer", "")) > 200 else result.get("answer", ""),
-                    "faithfulness": result.get("faithfulness_score", 0),
-                    "verified": result.get("verification_passed", False),
-                })
-            except httpx.HTTPError as e:
-                results.append({
-                    "question_index": i,
-                    "question": question,
-                    "error": str(e),
-                })
-    
-    avg_faithfulness = sum(faithfulness_scores) / len(faithfulness_scores) if faithfulness_scores else 0
-    
-    return {
-        "queries": results,
-        "statistics": {
-            "total_queries": len(questions),
-            "successful": len([r for r in results if "error" not in r]),
-            "failed": len([r for r in results if "error" in r]),
-            "average_faithfulness": avg_faithfulness,
-            "high_confidence_queries": sum(1 for s in faithfulness_scores if s >= 0.7),
-        },
-    }
-
-
-@mcp.tool()
-async def analyze_document_coverage(
-    document_id: int,
-    topics: list[str],
-    user_id: int = DEFAULT_USER_ID,
-) -> dict:
-    """
-    Analyze how well a specific document covers given topics.
-    
-    Creates a query for each topic and reports coverage statistics.
-    Useful for assessing completeness or relevance of documents.
-    
-    Args:
-        document_id: Document to analyze (for context)
-        topics: List of topics to check coverage for (e.g., ["security", "performance", "cost"])
-        user_id: User ID
+        chunks_list = []
+        for chunk in chunks:
+            chunks_list.append({
+                "chunk_id": str(chunk.id),
+                "text": chunk.text[:500] if chunk.text else "N/A",  # Preview first 500 chars
+                "embedding_model": chunk.embedding_model if hasattr(chunk, 'embedding_model') else "N/A",
+                "sequence": chunk.sequence if hasattr(chunk, 'sequence') else 0,
+            })
         
-    Returns:
-        dict with coverage analysis for each topic
-    """
-    coverage_results = []
-    
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        for topic in topics:
-            try:
-                # Craft a specific query about this topic
-                query = f"What does the document say about {topic}?"
-                
-                response = await client.post(
-                    f"{VERIRAG_API_BASE}/query/",
-                    json={
-                        "query": query,
-                        "user_id": user_id,
-                    },
-                    headers=HEADERS,
-                )
-                response.raise_for_status()
-                result = response.json()
-                
-                # Interpret results as coverage
-                is_covered = (
-                    result.get("verification_passed", False) and
-                    result.get("faithfulness_score", 0) >= 0.6 and
-                    "not found" not in result.get("answer", "").lower() and
-                    "not mentioned" not in result.get("answer", "").lower()
-                )
-                
-                coverage_results.append({
-                    "topic": topic,
-                    "covered": is_covered,
-                    "confidence": result.get("faithfulness_score", 0),
-                    "evidence": result.get("source_citation", "No citation found"),
-                })
-            except httpx.HTTPError as e:
-                coverage_results.append({
-                    "topic": topic,
-                    "covered": False,
-                    "error": str(e),
-                })
-    
-    coverage_count = sum(1 for r in coverage_results if r.get("covered"))
-    
-    return {
-        "document_id": document_id,
-        "coverage_analysis": coverage_results,
-        "summary": {
-            "topics_checked": len(topics),
-            "topics_covered": coverage_count,
-            "coverage_percent": (coverage_count / len(topics) * 100) if topics else 0,
-        },
-    }
-
-
-# ============================================================================
-# UTILITY & HEALTH TOOLS
-# ============================================================================
-
-@mcp.tool()
-async def health_check() -> dict:
-    """
-    Check VeriRAG backend health and connectivity.
-    
-    Verifies the backend is running and accessible. Use this to diagnose
-    connection issues before running queries.
-    
-    Returns:
-        dict with health status and backend information
-    """
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        try:
-            response = await client.get(
-                f"{VERIRAG_API_BASE}/health/",
-                headers=HEADERS,
-            )
-            response.raise_for_status()
-            health = response.json()
-            
-            return {
-                "status": "healthy",
-                "backend_reachable": True,
-                "database_connected": health.get("database", {}).get("connected", False),
-                "vector_store_ready": health.get("vector_store", {}).get("ready", False),
-                "version": health.get("version", "unknown"),
-                "api_base": VERIRAG_API_BASE,
-                "authenticated": bool(VERIRAG_API_TOKEN),
-            }
-        except httpx.HTTPError as e:
-            return {
-                "status": "unhealthy",
-                "backend_reachable": False,
-                "error": str(e),
-                "api_base": VERIRAG_API_BASE,
-                "suggestion": "Check if VeriRAG backend is running on the configured API_BASE URL",
-            }
+        logger.info(f"📄 Retrieved {len(chunks_list)} chunks from document {doc_id}")
+        
+        return {
+            "document_id": str(doc.id),
+            "document_title": doc.title,
+            "chunks_count": len(chunks_list),
+            "chunks": chunks_list,
+            "status": "success"
+        }
+        
+    except Document.DoesNotExist:
+        logger.warning(f"⚠️  Document {doc_id} not found")
+        return {
+            "error": f"Document {doc_id} not found",
+            "status": "not_found"
+        }
+    except Exception as e:
+        logger.error(f"❌ Get chunks error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "status": "error"
+        }
 
 
 @mcp.tool()
-async def get_config() -> dict:
+def get_rag_metrics() -> dict:
     """
-    Get MCP server configuration.
-    
-    Shows current settings like API endpoint, user ID, and auth status.
-    Useful for debugging connection issues.
+    Get RAG system metrics and statistics.
     
     Returns:
-        dict with current configuration
+        Dictionary with system metrics
     """
-    return {
-        "verirag_api_base": VERIRAG_API_BASE,
-        "default_user_id": DEFAULT_USER_ID,
-        "authenticated": bool(VERIRAG_API_TOKEN),
-        "auth_token_set": VERIRAG_API_TOKEN != "",
-        "timeout_seconds": TIMEOUT.timeout,
-        "environment_vars": {
-            "VERIRAG_API_BASE": "Set" if os.environ.get("VERIRAG_API_BASE") else "Not set (using default)",
-            "VERIRAG_API_TOKEN": "Set" if os.environ.get("VERIRAG_API_TOKEN") else "Not set",
-            "VERIRAG_DEFAULT_USER_ID": "Set" if os.environ.get("VERIRAG_DEFAULT_USER_ID") else "Not set (using 1)",
-        },
-    }
+    try:
+        total_docs = Document.objects.count()
+        total_chunks = DocumentChunk.objects.count()
+        
+        # Get model info if available
+        model_info = {
+            "embedding_model": "gemini-embedding-001",
+            "generation_model": "gemini-1.5-pro",
+        }
+        
+        logger.info("📊 Retrieved RAG metrics")
+        
+        return {
+            "total_documents": total_docs,
+            "total_chunks": total_chunks,
+            "model_info": model_info,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Get metrics error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "status": "error"
+        }
+
+
+async def main():
+    """Main entry point for MCP server"""
+    logger.info("🚀 Starting VeriRAG MCP Server...")
+    logger.info(f"   Server name: {mcp.name}")
+    logger.info(f"   Version: {mcp.version}")
+    logger.info(f"   Tools: {', '.join([t.name for t in mcp.tools.values()])}")
+    
+    # Run server
+    async with mcp.run_server() as server:
+        logger.info("✅ MCP Server running and ready for connections")
 
 
 if __name__ == "__main__":
-    """Run the MCP server"""
-    import sys
+    import asyncio
     
-    logger.info("🚀 Starting VeriRAG MCP Server...")
-    logger.info(f"📡 API Base: {VERIRAG_API_BASE}")
-    logger.info(f"🔐 Authenticated: {bool(VERIRAG_API_TOKEN)}")
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     
-    mcp.run(transport="stdio")
+    # Run async main
+    asyncio.run(main())
