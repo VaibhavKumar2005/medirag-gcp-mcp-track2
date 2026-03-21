@@ -2,207 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global Reset */
 @layer base {
-  body {
-    @apply bg-slate-950 text-slate-200 antialiased;
-    margin: 0;
-    font-family: 'Inter', system-ui, sans-serif;
-  }
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
+
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
+
+    /* Emerald Green Primary */
+    --primary: 160 84% 39%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
+
+    /* Soft Peach Secondary / Accent */
+    --secondary: 24 100% 77%;
     --secondary-foreground: 222.2 47.4% 11.2%;
+
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
+
+    /* Peach Highlights for active states */
+    --accent: 24 100% 77%;
     --accent-foreground: 222.2 47.4% 11.2%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
+
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    
+    /* Green Focus Rings */
+    --ring: 160 84% 39%;
+
+    --radius: 0.75rem;
   }
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
+
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+
+    /* Emerald Green */
+    --primary: 160 84% 39%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Peach */
+    --secondary: 24 100% 77%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+
+    --accent: 24 100% 77%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
+
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --ring: 160 84% 39%;
   }
 }
 
-:root {
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  background-color: #040207;
-  color: #f8fafc;
-}
-
-body {
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Custom smooth scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-}
-::-webkit-scrollbar-track {
-  background: #040207;
-}
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 5px;
-  border: 2px solid #040207;
-}
-
-/* === Bento Grid Glass Cards === */
-.bento-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 1.25rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.bento-card:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
-
-/* === Animated Gauge === */
-@keyframes gauge-fill {
-  from { stroke-dashoffset: 283; }
-}
-@keyframes pulse-glow {
-  0%, 100% { filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.4)); }
-  50% { filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.7)); }
-}
-.gauge-ring {
-  animation: gauge-fill 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-.gauge-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
-}
-
-/* === Gradient Orb Backgrounds === */
-@keyframes orb-float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(30px, -20px) scale(1.05); }
-  66% { transform: translate(-15px, 15px) scale(0.95); }
-}
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.15;
-  animation: orb-float 20s ease-in-out infinite;
-  pointer-events: none;
-}
-
-/* === Area Chart Gradient === */
-@keyframes area-reveal {
-  from { clip-path: inset(0 100% 0 0); }
-  to { clip-path: inset(0 0 0 0); }
-}
-.area-chart-animate {
-  animation: area-reveal 1.2s ease-out forwards;
-}
-
-/* === Skeleton Pulse Loading === */
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 0.08; }
-  50% { opacity: 0.16; }
-}
-.skeleton-pulse {
-  animation: skeleton-pulse 1.8s ease-in-out infinite;
-}
-
-/* === Spotlight Card (mouse-follow glow) === */
-.spotlight-card {
-  position: relative;
-  overflow: hidden;
-}
-.spotlight-card::before {
-  content: '';
-  position: absolute;
-  top: var(--my, -200px);
-  left: var(--mx, -200px);
-  width: 300px;
-  height: 300px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
-  pointer-events: none;
-  transition: opacity 0.3s;
-  opacity: 0;
-}
-.spotlight-card:hover::before {
-  opacity: 1;
-}
-
-/* === Stagger-In Entrance === */
-@keyframes stagger-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
+@layer base {
+  * {
+    @apply border-border;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
-}
-.stagger-in {
-  animation: stagger-in 0.4s ease-out forwards;
-  animation-delay: var(--delay, 0ms);
-  opacity: 0;
-}
-
-/* === Custom thin scrollbar for panels === */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.14);
 }
