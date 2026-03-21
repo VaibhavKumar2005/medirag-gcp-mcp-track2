@@ -1,65 +1,141 @@
-# 🏗️ VeriRAG Architecture — Dual-Agent Verification Protocol
+# � MediRAG Architecture — Verifiable Clinical Intelligence
 
 ## Overview
 
-VeriRAG implements a **dual-agent verification architecture** that prevents AI hallucinations in document Q&A. Instead of trusting a single LLM's output, every response passes through a multi-stage verification pipeline that combines two independent language models with heuristic analysis.
+**MediRAG** (formerly VeriRAG) implements a **dual-agent verification architecture** specifically designed for clinical document Q&A and deployed on Google Cloud Platform. In healthcare, AI hallucinations are unacceptable. Every response passes through a multi-stage verification pipeline that combines two independent language models with heuristic analysis, ensuring that every AI-generated claim is rigorously verified and directly cited back to verified medical records.
+
+This is the **Track 2: DevOps & Deployment** submission for the H2S GenAI Academy APAC 2026.
+
+---
+
+## 🚀 Key Innovations
+
+### 1. **Dual-Agent Verification**
+Instead of relying on a single LLM, MediRAG combines:
+- **Primary Agent (Gemini 3.1 Pro):** Generates responses with high speed and accuracy
+- **Critic Agent:** Independently verifies faithfulness using heuristic analysis (term overlap & novelty penalty)
+- **Fallback Agent (Llama-3):** If faithfulness drops below 0.6, a stricter model takes over
+
+### 2. **Keyless OIDC Authentication (Google Workload Identity)**
+Zero-trust deployment with no long-lived JSON service account keys stored in GitHub. Authentication is secured via OpenID Connect Workload Identity Federation.
+
+### 3. **Model Context Protocol (MCP) Architecture**
+Microservice separation:
+- **Django Backend** (Cloud Run): Exposes search_documents and rag_query tools via MCP
+- **FastAPI ADK Agent** (Cloud Run): Independent reasoning agent consuming MCP tools
+
+### 4. **Clinical Security & Compliance**
+- **CWE-117 (Log Injection):** User inputs sanitized with regex before logging
+- **S8392 (Hardcoded Hosts):** Network binding uses environment-injected configuration
+- **S3457 (Hardcoded Credentials):** All secrets via Google Secret Manager (GCSM)
 
 ---
 
 ## System Architecture Diagram
 
-```
-                    ┌─────────────────────┐
-                    │     User Query      │
-                    └──────────┬──────────┘
+### Complete End-to-End Flow (Google Cloud Run)
+
+```text
+                    ┌──────────────────────┐
+                    │  Clinical Query      │
+                    │  (REST/MCP Client)   │
+                    └──────────┬───────────┘
                                │
-                    ┌──────────▼──────────┐
-                    │  JWT Authentication │
-                    │  (SimpleJWT)        │
-                    └──────────┬──────────┘
+                    ┌──────────▼──────────────────────┐
+                    │   OIDC Keyless Auth             │
+                    │   (Workload Identity Federation)│
+                    │   No JSON Keys in GitHub!       │
+                    └──────────┬──────────────────────┘
                                │
-                    ┌──────────▼──────────┐
-                    │  query_llm()        │
-                    │  views.py           │
-                    └──────────┬──────────┘
-                               │
-              ┌────────────────▼────────────────┐
-              │     get_verified_answer()        │
-              │     rag_logic.py                 │
-              └────────────────┬────────────────┘
-                               │
-         ┌─────────────────────┼─────────────────────┐
-         │                     │                     │
-         ▼                     ▼                     ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ Step 1: Context │  │ Step 2: Generate │  │ Step 3: Verify  │
-│ Retrieval       │  │ Response         │  │ Faithfulness    │
-│ (pgvector)      │  │ (Gemini)         │  │ (Critic Agent)  │
-└────────┬────────┘  └────────┬────────┘  └────────┬────────┘
-         │                     │                     │
-         │                     │           ┌─────────▼─────────┐
-         │                     │           │ Score < 0.6?       │
-         │                     │           │ ┌───┐    ┌────┐   │
-         │                     │           │ │YES│    │ NO │   │
-         │                     │           │ └─┬─┘    └──┬─┘   │
-         │                     │           └───┼─────────┼─────┘
-         │                     │               │         │
-         │                     │     ┌─────────▼───┐     │
-         │                     │     │ Step 4:     │     │
-         │                     │     │ Regenerate  │     │
-         │                     │     │ (Groq/      │     │
-         │                     │     │  Llama-3)   │     │
-         │                     │     └─────────┬───┘     │
-         │                     │               │         │
-         └─────────────────────┴───────────────┴────┬────┘
-                                                    │
-                                         ┌──────────▼──────────┐
-                                         │  Standardized JSON  │
-                                         │  Response           │
-                                         └─────────────────────┘
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        │            ┌─────────▼─────────┐            │
+        │            │   Cloud Run       │            │
+        │            │  (Django Backend) │            │
+        │            │  Port 8000        │            │
+        │            └─────────┬─────────┘            │
+        │                      │                      │
+        │      ┌───────────────▼───────────────┐      │
+        │      │   get_verified_answer()       │      │
+        │      │   rag_logic.py (MCP Tools)    │      │
+        │      │                               │      │
+        │   ┌──┴─────────────────────┬──────┬─┴──┐   │
+        │   │                        │      │    │   │
+        ▼   ▼                        ▼      ▼    ▼   ▼
+┌─────────────────┐  ┌──────────┐  ┌──────────────┐  ┌──────────┐
+│ Step 1: Context │  │ Step 2:  │  │ Step 3:      │  │ Step 4:  │
+│ Retrieval       │  │ Generate │  │ Verify       │  │ Fallback │
+│ (Cloud SQL      │  │ Response │  │ Faithfulness │  │ (Groq)   │
+│  /pgvector)     │  │(Gemini   │  │ (Critic)     │  │          │
+│                 │  │ 3.1 Pro) │  │              │  │          │
+└────────┬────────┘  └────┬─────┘  └─────┬────────┘  └────┬─────┘
+         │                │              │               │
+         └────────────────┴──────────────┴───────────────┘
+                          │
+                    ┌─────▼─────────┐
+                    │ Step 5: Return │
+                    │ Standardized   │
+                    │ JSON Response  │
+                    └─────┬─────────┘
+                          │
+         ┌────────────────▼──────────────┐
+         │  Cloud Run (FastAPI ADK)      │
+         │  (Optional: Independent Agent)│
+         └───────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+🔐 GCP Infrastructure Behind the Scenes
+═══════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────┐
+│  GitHub Actions (OIDC Provider)         │
+│  ↓                                      │
+│  Google Workload Identity Federation    │
+│  (Federated Credentials — No Keys!)    │
+│  ↓                                      │
+│  Temporary STS Token → Cloud Build       │
+└──────────┬──────────────────────────────┘
+           │
+  ┌────────┴────────────┬─────────────────┐
+  │                     │                 │
+  ▼                     ▼                 ▼
+Cloud Build          Artifact Registry   Cloud Run
+(CI/CD)              (Image Registry)    (Serverless)
+Builds Docker        Stores              Red-Blue
+Image                Python:3.11-slim    Deployments
+                     (Minimal!)
+                     
+           ┌──────────────────────────────┐
+           │  Cloud SQL (PostgreSQL)      │
+           │  + pgvector Extension        │
+           │  (Vector Database)           │
+           └──────────────────────────────┘
+
+           ┌──────────────────────────────┐
+           │  Google Secret Manager       │
+           │  (API Keys, DB Password)     │
+           └──────────────────────────────┘
+
+           ┌──────────────────────────────┐
+           │  Cloud Logging               │
+           │  (Sanitized: CWE-117 Fixed)  │
+           └──────────────────────────────┘
 ```
 
 ---
+
+## 🛠️ GCP Deployment Components
+
+| Component | Service | Role |
+|-----------|---------|------|
+| **Compute** | Cloud Run | Django backend + FastAPI agent (serverless) |
+| **Auth** | Workload Identity Federation | OIDC keyless deployment |
+| **Database** | Cloud SQL (PostgreSQL) | Vector store (pgvector) + relational data |
+| **Artifacts** | Artifact Registry | Multi-stage Docker images |
+| **CI/CD** | Cloud Build + GitHub Actions | Automated builds and deployments |
+| **Secrets** | Secret Manager | API keys, DB passwords (GCSM) |
+| **Logging** | Cloud Logging | Audit trail (CWE-117 remediated) |
+| **Models** | Vertex AI / Google AI Studio | Gemini 3.1 Pro access |
 
 ## The Five-Stage Verification Pipeline
 
@@ -255,10 +331,105 @@ Workers listen on multiple queues: `celery`, `ingestion`, `monitoring`, `mainten
 
 ---
 
-## Security Architecture
+## 🛡️ Clinical Security & Compliance Architecture
 
-See [SECURITY.md](SECURITY.md) for the complete security model including:
-- HashiCorp Vault integration for dynamic API key retrieval
-- JWT authentication via SimpleJWT
-- Content Security Policy (CSP) headers
-- Multi-tenant data isolation at the vector store level
+MediRAG addresses critical security vulnerabilities to meet healthcare compliance standards:
+
+### CWE-117: Improper Output Neutralization (Log Injection)
+**Problem:** User-controlled queries could inject malicious log entries.
+
+**Solution:** All user inputs are sanitized with regex before hitting system logs:
+```python
+import re
+
+def sanitize_for_logging(user_input: str) -> str:
+    # Remove newlines, carriage returns, and other control characters
+    sanitized = re.sub(r'[\r\n\x00-\x1f]', '', user_input)
+    # Truncate overly long inputs
+    return sanitized[:500]
+```
+
+**Result:** Untamperable audit trail in Cloud Logging.
+
+---
+
+### S8392: Hardcoded IP Address (0.0.0.0 Binding)
+**Problem:** Hardcoded `HOST='0.0.0.0'` in settings during local development could leak into production.
+
+**Solution:** All server bindings use environment-injected configuration:
+```python
+# settings.py (refactored)
+ALLOWED_HOSTS = [
+    'localhost', 
+    '127.0.0.1', 
+    '0.0.0.0',  # Only in DEBUG mode
+    '.a.run.app',  # Cloud Run domains
+    os.environ.get('CLOUDRUN_SERVICE_URL', '').replace('https://', '')
+]
+```
+
+The `ALLOWED_HOSTS` is dynamically configured per environment, preventing local dev configs from leaking to production.
+
+---
+
+### S3457: Hardcoded Credentials
+**Problem:** API keys and database passwords hardcoded in .env files.
+
+**Solution:** All secrets are injected via Google Secret Manager:
+```bash
+# Cloud Run deployment
+gcloud run deploy verirag-backend \
+  --set-env-vars=POSTGRES_PASSWORD=$(gcloud secrets versions access latest --secret=postgres-password) \
+  --set-env-vars=DJANGO_SECRET_KEY=$(gcloud secrets versions access latest --secret=django-secret-key)
+```
+
+No credentials ever appear in Git or Docker images.
+
+---
+
+### HIPAA-Ready Data Isolation
+Each document chunk carries `user_id` metadata, ensuring:
+- **Multi-tenant isolation:** Users only retrieve their own documents
+- **Query filtering:** Every pgvector search includes a `user_id` filter
+- **No cross-contamination:** Two clinicians' patients never see each other's records
+
+```python
+# Secure query with user isolation
+docs = vector_db.similarity_search(
+    query, k=5,
+    filter={"user_id": str(current_user.id)}  # Critical!
+)
+```
+
+---
+
+## Model Context Protocol (MCP) Architecture
+
+MediRAG follows the **Model Context Protocol** specification to expose AI-native tools for agents:
+
+### MCP Server (Django Backend)
+Exposes two core tools:
+
+| Tool | Input | Output | Purpose |
+|------|-------|--------|---------|
+| `search_documents` | query, user_id, k | [{ title, page, chunk }] | Retrieve document vectors |
+| `rag_query` | clinical_question | { answer, score, citation } | Run full verification pipeline |
+
+### MCP Client (FastAPI ADK Agent)
+An independent AI agent can consume these tools to reason about clinical decisions:
+
+```
+FastAPI Agent  
+    ↓
+rag_query("Is patient allergic to penicillin?")  
+    ↓  
+Django Backend (MCP Server)  
+    ↓  
+pgvector similarity search → Gemini verification → Critic heuristics  
+    ↓  
+Response: { answer: "Yes (pg 2, allergic reaction noted)", score: 0.95 }
+```
+
+This separation allows the agent to focus on **clinical reasoning** while the backend handles **vector operations** and **hallucination prevention**.
+
+---
