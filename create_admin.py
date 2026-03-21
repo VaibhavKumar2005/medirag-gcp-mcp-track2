@@ -10,9 +10,9 @@ if User.objects.filter(username='admin').exists():
     u = User.objects.get(username='admin')
     print('✅ Admin user exists, updating password...')
 else:
-    u = User.objects.create_superuser('admin', 'admin@verirag.dev', 'AdminPass123!')
+    u = User.objects.create_superuser('admin', 'admin@verirag.dev', os.getenv('ADMIN_PASSWORD'))
     print('✅ Admin user created')
 
-u.set_password('AdminPass123!')
+u.set_password(os.getenv('ADMIN_PASSWORD'))
 u.save()
-print('✅ Admin password set to: AdminPass123!')
+print('✅ Admin password set securely.')
