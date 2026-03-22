@@ -67,6 +67,11 @@ DATABASES = {
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
         'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
         'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        # CRITICAL for Cloud Run: close DB connections after each request.
+        # Cloud Run scales to N instances simultaneously; without this, each
+        # instance holds persistent connections and PostgreSQL max_connections
+        # (default 100) is exhausted under load.
+        'CONN_MAX_AGE': 0,
     }
 }
 

@@ -1,78 +1,25 @@
-# VeriRAG GCP Track 2 - Python Dependencies
-# Add to apps/backend/requirements.txt
+# MediRAG ADK Agent — Cloud Run requirements
+# Strictly minimal: only what verirag_adk_agent.py imports at runtime.
+#
+# DO NOT add Django, Celery, psycopg2, or any backend deps here.
+# DO NOT add docker or docker-compose — they require a Docker socket
+# (unavailable inside Cloud Build) and will crash the build.
 
-# Core Framework
-Django==5.0.0
-djangorestframework==3.14.0
-django-cors-headers==4.3.0
+# Google Agent Development Kit
+google-adk>=0.1.0
 
-# Database & ORM
-psycopg2-binary==2.9.9
-pgvector==0.3.1
-sqlalchemy==2.0.23
+# Gemini SDK (ADK dependency; explicit pin avoids resolution conflicts)
+google-generativeai>=0.7.0
 
-# GCP Services
-google-cloud-bigquery==3.14.1
-google-cloud-storage==2.10.0
-google-cloud-firestore==2.12.0
-google-cloud-aiplatform==1.40.0
-google-auth==2.25.2
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
+# Web server — Cloud Run Dockerfile runs: uvicorn verirag_adk_agent:app
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
 
-# MCP (Model Context Protocol)
-mcp>=0.7.0
-fastmcp>=0.1.0
+# HTTP client (used internally by McpToolset for Streamable HTTP transport)
+httpx>=0.25.0
 
-# LLM Integration
-google-generativeai>=0.3.0
-anthropic==0.7.10
+# Data validation (FastAPI dependency)
+pydantic>=2.4.0
 
-# Web Server
-gunicorn==21.2.0
-uvicorn[standard]==0.24.0
-
-# API & Serialization
-pydantic==2.4.2
-pydantic-settings==2.1.0
-requests==2.31.0
-httpx==0.25.2
-
-# Utilities
-python-dotenv==1.0.0
-python-decouple==3.8
-Pillow==10.1.0
-
-# Async Support
-asyncio==3.4.3
-aiofiles==23.2.1
-
-# Logging & Monitoring
+# Structured logging for Cloud Run / Cloud Logging
 python-json-logger==2.0.7
-prometheus-client==0.18.0
-
-# Security
-cryptography==41.0.7
-pyjwt==2.8.1
-
-# Testing
-pytest==7.4.3
-pytest-django==4.7.0
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-factory-boy==3.3.0
-
-# Code Quality
-black==23.12.0
-flake8==6.1.0
-isort==5.13.2
-mypy==1.7.1
-
-# Development
-django-debug-toolbar==4.2.0
-django-extensions==3.2.3
-ipython==8.18.1
-
-# Optional: For local development
-docker==7.0.0
-docker-compose==1.29.2

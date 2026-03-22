@@ -16,22 +16,28 @@ psycopg2-binary==2.9.9
 pgvector==0.3.1
 sqlalchemy==2.0.23
 
-# GCP Services
+# GCP Services (replaces Azure OpenAI / Azure Search / Azure Key Vault)
 google-cloud-bigquery==3.14.1
 google-cloud-storage==2.10.0
 google-cloud-firestore==2.12.0
 google-cloud-aiplatform==1.40.0
+google-cloud-secret-manager==2.18.2
 google-auth==2.25.2
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.0
+
+# Google Generative AI — Gemini 1.5 Flash + text-embedding-004
+google-generativeai>=0.7.0
+langchain-google-genai>=1.0.0
 
 # MCP (Model Context Protocol)
 mcp>=0.7.0
 fastmcp>=0.1.0
 
 # LLM Integration
-google-generativeai>=0.3.0
-anthropic==0.7.10
+# NOTE: google-generativeai is listed above under GCP Services
+# Groq uses the openai-compatible SDK (OpenAI package, Groq base_url)
+# anthropic removed — not used in this project
 
 # Web Server
 gunicorn==21.2.0
