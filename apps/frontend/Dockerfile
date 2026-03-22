@@ -1,6 +1,6 @@
 ###############################################################################
-# VeriRAG Frontend — Production-Grade Multi-Stage Dockerfile
-# AZ-400 Best Practices: non-root nginx, minimal image, pinned versions
+# MediRAG Frontend — Production-Grade Multi-Stage Dockerfile
+# GCP Track 2 Best Practices: non-root nginx, minimal image, runtime env injection
 ###############################################################################
 
 # ── Stage 1: Build ──────────────────────────────────────────────────────────
@@ -16,9 +16,8 @@ RUN npm ci --no-audit --no-fund
 
 COPY . .
 
-ARG VITE_API_URL=http://localhost:8000
-ENV VITE_API_URL=${VITE_API_URL}
-
+# Build with a known placeholder that we will replace at runtime
+ENV VITE_API_URL=__VITE_API_URL_PLACEHOLDER__
 RUN npm run build
 
 # ── Stage 2: Serve ──────────────────────────────────────────────────────────
@@ -27,8 +26,8 @@ FROM nginx:stable-alpine AS runtime
 # Security: Upgrade all OS packages to latest patched versions
 RUN apk update && apk upgrade --no-cache
 
-LABEL maintainer="Team96 <team96@verirag.dev>" \
-      org.opencontainers.image.title="VeriRAG Frontend" \
+LABEL maintainer="Team96 <team96@medirag.dev>" \
+      org.opencontainers.image.title="MediRAG Frontend" \
       org.opencontainers.image.description="React SPA for Cloud-Native RAG"
 
 # Remove default nginx config
@@ -52,20 +51,30 @@ RUN echo 'server { \
     } \
     gzip on; \
     gzip_types text/css application/javascript application/json image/svg+xml; \
-}' > /etc/nginx/conf.d/verirag.conf
+}' > /etc/nginx/conf.d/medirag.conf
 
-# Run as non-root (AZ-400 requirement)
+# DevOps Magic: Runtime Environment Injection Script
+# This fixes the Vite build-time limitation for Cloud Run deployments
+RUN echo '#!/bin/sh' > /docker-entrypoint.sh \
+    && echo 'if [ -n "$VITE_API_URL" ]; then' >> /docker-entrypoint.sh \
+    && echo '  echo "Injecting runtime VITE_API_URL: $VITE_API_URL"' >> /docker-entrypoint.sh \
+    && echo '  find /usr/share/nginx/html/assets -type f -name "*.js" -exec sed -i "s|__VITE_API_URL_PLACEHOLDER__|$VITE_API_URL|g" {} +;' >> /docker-entrypoint.sh \
+    && echo 'fi' >> /docker-entrypoint.sh \
+    && echo 'exec nginx -g "daemon off;"' >> /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh
+
+# Run as non-root (Security requirement)
 RUN chown -R nginx:nginx /usr/share/nginx/html \
     && chown -R nginx:nginx /var/cache/nginx \
     && chown -R nginx:nginx /var/log/nginx \
     && touch /var/run/nginx.pid \
-    && chown nginx:nginx /var/run/nginx.pid
+    && chown nginx:nginx /var/run/nginx.pid \
+    && chown nginx:nginx /docker-entrypoint.sh
 
 USER nginx
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-    CMD wget -qO- http://localhost:8080/ || exit 1
+# Cloud Run HTTP probes handle health checks; Docker HEALTHCHECK removed.
 
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
