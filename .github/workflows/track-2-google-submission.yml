@@ -8,6 +8,7 @@ on:
 env:
   GCP_PROJECT_ID: project-5f9ff1f2-755e-4532-bcd
   GCP_REGION: us-central1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # FIX: Node 20 deprecation (enforced June 2026)
 
 jobs:
   deploy-mcp-server:
@@ -24,14 +25,25 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      
+
       - id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: verirag-mcp-server
           source: ./apps/backend
           region: ${{ env.GCP_REGION }}
-          flags: "--allow-unauthenticated --port=8000"
+          # FIX 1: Explicit Dockerfile.mcp so Cloud Build starts Uvicorn, not Gunicorn
+          # FIX 2: cpu-boost + no-cpu-throttling prevents gRPC cold-start hangs
+          # FIX 3: min-instances=1 ensures no cold starts for a clinical/healthcare app
+          flags: >-
+            --dockerfile=Dockerfile.mcp
+            --allow-unauthenticated
+            --port=8000
+            --cpu=4
+            --memory=8Gi
+            --no-cpu-throttling
+            --min-instances=1
+            --cpu-boost
 
   deploy-adk-agent:
     name: Deploy ADK Agent
