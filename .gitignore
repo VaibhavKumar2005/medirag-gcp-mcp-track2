@@ -324,3 +324,4 @@ k8s/secrets.yaml
 # Explicitly block the GCP key you created in the guide
 verirag-key.json
 *-key.json
+new-verirag-gcp-track2/

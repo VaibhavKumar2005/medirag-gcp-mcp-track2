@@ -1,68 +1,180 @@
-import React from 'react';
-import { FcGoogle } from 'react-icons/fc';
-import { FaGithub } from 'react-icons/fa';
-import { useAuth } from './lib/auth';
-import { Navigate } from 'react-router-dom';
+import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Shield, Zap, Loader2 } from 'lucide-react'
+import api, { API_BASE } from './lib/api'
+import { storeSession } from './lib/auth'
 
 export default function Login() {
-  const { user, loginWithGoogle, loginWithGithub } = useAuth();
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
 
-  // If the user is already logged in, redirect them to the dashboard
-  if (user) {
-    return <Navigate to="/dashboard" />;
+  async function handleLogin(e) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const { data } = await api.post('/api/token/', { username: email, password })
+      storeSession(data.access, data.refresh, false)
+      navigate('/')
+    } catch {
+      setError('Invalid credentials. Use the Demo Access button below to try the app.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDemoAccess() {
+    setDemoLoading(true)
+    setError('')
+    try {
+      // 1. Get demo JWT
+      const { data } = await api.get('/api/demo/token/')
+      storeSession(data.access, data.refresh, true)
+      // 2. Seed the demo library (fire-and-forget — non-blocking)
+      api.post('/api/demo/seed/', {}, {
+        headers: { Authorization: `Bearer ${data.access}` }
+      }).catch(() => {})
+      navigate('/')
+    } catch {
+      setError('Demo mode is currently unavailable. Please try again shortly.')
+    } finally {
+      setDemoLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700">
-        
-        {/* Header & Logo */}
-        <div>
-          <div className="flex justify-center">
-            {/* Medical Security Shield Icon */}
-            <div className="h-14 w-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+    <div className="min-h-screen bg-[#040207] flex items-center justify-center px-4">
+      <div style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 20,
+        padding: '2.5rem',
+        width: '100%',
+        maxWidth: 420,
+      }}>
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '2rem' }}>
+          <div style={{
+            background: 'rgba(34,211,238,0.12)',
+            border: '1px solid rgba(34,211,238,0.2)',
+            borderRadius: 12,
+            padding: 10,
+          }}>
+            <Shield size={22} color="#67e8f9" />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 18, color: '#fff' }}>MediRAG</div>
+            <div style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.2em', color: '#475569', textTransform: 'uppercase' }}>
+              Clinical Intelligence
             </div>
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Sign in to MediRAG
-          </h2>
-          <p className="mt-3 text-center text-sm text-gray-600 dark:text-gray-400">
-            Secure clinical intelligence platform. <br/>
-            Please authenticate to access your patient records.
-          </p>
         </div>
 
-        {/* OAuth SSO Buttons */}
-        <div className="mt-8 space-y-4">
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 8 }}>Sign in</h2>
+        <p style={{ fontSize: 14, color: '#64748b', marginBottom: '1.5rem' }}>
+          Secure clinical document intelligence platform
+        </p>
+
+        {/* Demo access — prominent for judges */}
+        <button
+          onClick={handleDemoAccess}
+          disabled={demoLoading}
+          style={{
+            width: '100%',
+            padding: '14px',
+            background: 'rgba(34,211,238,0.12)',
+            border: '1px solid rgba(34,211,238,0.3)',
+            borderRadius: 12,
+            color: '#67e8f9',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: demoLoading ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            marginBottom: '1.25rem',
+          }}
+        >
+          {demoLoading
+            ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading demo…</>
+            : <><Zap size={16} /> Try Demo — No account needed</>
+          }
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+          <span style={{ fontSize: 12, color: '#475569' }}>or sign in with credentials</span>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+        </div>
+
+        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            style={{
+              padding: '12px 14px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 10,
+              color: '#e2e8f0',
+              fontSize: 14,
+              outline: 'none',
+            }}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            style={{
+              padding: '12px 14px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 10,
+              color: '#e2e8f0',
+              fontSize: 14,
+              outline: 'none',
+            }}
+          />
+          {error && (
+            <p style={{ fontSize: 13, color: '#f87171', margin: 0 }}>{error}</p>
+          )}
           <button
-            onClick={loginWithGoogle}
-            className="w-full flex items-center justify-center px-4 py-3.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: '13px',
+              background: loading ? '#334155' : '#0ea5e9',
+              border: 'none',
+              borderRadius: 10,
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: 14,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
           >
-            <FcGoogle className="h-6 w-6 mr-3" />
-            Continue with Google
+            {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Signing in…</> : 'Sign in'}
           </button>
+        </form>
 
-          <button
-            onClick={loginWithGithub}
-            className="w-full flex items-center justify-center px-4 py-3.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 dark:focus:ring-gray-500"
-          >
-            <FaGithub className="h-6 w-6 mr-3 text-gray-900 dark:text-white" />
-            Continue with GitHub
-          </button>
-        </div>
-        
-        {/* Security Compliance Footer */}
-        <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700 text-center">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              By signing in, you verify your identity via SSO. <br/>
-              All clinical documents are encrypted at rest (AES-256).
-            </p>
-        </div>
-
+        <p style={{ fontSize: 11, color: '#334155', textAlign: 'center', marginTop: '1.5rem' }}>
+          Demo mode uses pre-loaded clinical scenarios. No real patient data.
+        </p>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
-  );
+  )
 }

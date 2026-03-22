@@ -5,7 +5,7 @@ Connects to the MediRAG MCP server via Model Context Protocol (Streamable HTTP).
 Uvicorn entrypoint (Cloud Run): uvicorn verirag_adk_agent:app --host 0.0.0.0 --port 8080
 
 Bug fixes applied:
-  - BUG 3: model="gemini-3-1-pro-001" replaced with "models/gemini-1.5-flash-latest"
+  - Model: "models/gemini-1.5-flash-latest" (production Gemini 1.5 Flash endpoint)
            (the previous string returned a 404 from the Gemini API)
   - Module-level `app` object added so uvicorn can bind without AttributeError
   - HOST defaults to 0.0.0.0 (required by Cloud Run) instead of 127.0.0.1
@@ -99,7 +99,7 @@ class MediRAGAgent:
     def _init_adk_agent(self) -> None:
         """Construct the LlmAgent with MCP toolset."""
         try:
-            # BUG FIX: "gemini-3-1-pro-001" does not exist and returns HTTP 404.
+            # Use the canonical full model path — resolves to latest stable 1.5 Flash.
             # Use a valid, production model identifier.  "models/gemini-1.5-flash-latest"
             # resolves to the latest stable 1.5 Flash release and is always available.
             self.agent = LlmAgent(

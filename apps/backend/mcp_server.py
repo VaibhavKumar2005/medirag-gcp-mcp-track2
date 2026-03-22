@@ -2,17 +2,13 @@
 MediRAG MCP Server — GCP Track 2 Submission
 Exposes clinical RAG tools via Model Context Protocol (FastMCP >= 2.x).
 
-Uvicorn entrypoint:  uvicorn mcp_server:app --host 0.0.0.0 --port 8000
+Uvicorn entrypoint: uvicorn mcp_server:app --host 0.0.0.0 --port 8000
 
 Architecture:
-  - FastAPI  handles /health and the outer HTTP surface
-  - FastMCP  handles /mcp  (Streamable HTTP transport, MCP spec 2025-03-26)
-  - The two are composed via FastAPI.mount(), giving a single ASGI 'app' object
-    that Uvicorn can bind to without any AttributeError.
-
-Bug fixed: previous version used the wrong ASGI mount method (does not exist in
-FastMCP >= 2.x.  The correct method is mcp.http_app() which returns a proper
-Starlette sub-application implementing the Streamable HTTP transport.
+  - FastAPI   handles /health and the outer HTTP surface
+  - FastMCP   handles /mcp  (Streamable HTTP transport, MCP spec 2025-03-26)
+  - mcp.http_app() returns the correct Starlette ASGI sub-application;
+    it is mounted under /mcp so the single `app` object serves both.
 """
 
 import os
@@ -20,7 +16,7 @@ import sys
 import logging
 from django.db.models import Count
 
-# ── Django bootstrap (must happen before any model imports) ──────────────────
+# ── Django bootstrap (before any model imports) ──────────────────────────────
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "rag_backend.settings")
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -40,17 +36,15 @@ mcp = FastMCP(
     version="1.0.0",
 )
 
-# ── FastAPI outer app (uvicorn entrypoint: uvicorn mcp_server:app) ────────────
+# ── FastAPI outer app (uvicorn mcp_server:app) ────────────────────────────────
 app = FastAPI(
     title="MediRAG MCP Server",
     description="GCP Track 2 — Clinical RAG tools via Model Context Protocol",
     version="1.0.0",
 )
 
-# BUG FIX: Use mcp.http_app() — the correct Streamable HTTP transport method.
-# http_app() returns the Starlette ASGI application that implements the
-# MCP Streamable HTTP transport (spec 2025-03-26).  The old mount method was removed
-# in FastMCP v2 and never existed in v3.x releases.
+# Mount MCP Streamable HTTP transport — http_app() is the correct method
+# for FastMCP >= 2.x (asgi_app() was removed in v2 and never existed in v3)
 app.mount("/mcp", mcp.http_app())
 
 
@@ -58,9 +52,11 @@ app.mount("/mcp", mcp.http_app())
 async def health():
     """Cloud Run liveness / readiness probe."""
     return {
-        "status": "healthy",
-        "service": "medirag-mcp-server",
+        "status":       "healthy",
+        "service":      "medirag-mcp-server",
         "mcp_endpoint": "/mcp",
+        "llm_primary":  "gemini-1.5-flash",
+        "vector_store": "postgresql+pgvector",
     }
 
 
@@ -73,26 +69,25 @@ def search_documents(query: str, top_k: int = 5) -> dict:
     Returns ranked results with document metadata and content previews.
     """
     try:
-        top_k = max(1, min(int(top_k), 20))
-        logger.info("Semantic search for: '%s' (top_k=%d)", query, top_k)
+        top_k     = max(1, min(int(top_k), 20))
+        logger.info("Semantic search: '%s' (top_k=%d)", query, top_k)
         vector_db = get_vector_store()
-        results = vector_db.similarity_search_with_score(query, k=top_k)
-
-        formatted = []
-        for doc, score in results:
-            formatted.append({
-                "document_id":     doc.metadata.get("document_id", "unknown"),
-                "title":           doc.metadata.get("document_title", "unknown"),
-                "content_preview": doc.page_content[:300],
-                "relevance_score": round(float(score), 4),
-                "page":            doc.metadata.get("page", "unknown"),
-            })
+        results   = vector_db.similarity_search_with_score(query, k=top_k)
 
         return {
             "query":         query,
-            "results_count": len(formatted),
-            "results":       formatted,
-            "status":        "success",
+            "results_count": len(results),
+            "results": [
+                {
+                    "document_id":     doc.metadata.get("document_id", "unknown"),
+                    "title":           doc.metadata.get("document_title", "unknown"),
+                    "content_preview": doc.page_content[:300],
+                    "relevance_score": round(float(score), 4),
+                    "page":            doc.metadata.get("page", "unknown"),
+                }
+                for doc, score in results
+            ],
+            "status": "success",
         }
     except Exception as e:
         logger.error("search_documents error: %s", e, exc_info=True)
@@ -106,13 +101,13 @@ def rag_query(question: str, user_id: str = "public") -> dict:
 
     Pipeline:
       1. Retrieve top-5 chunks from pgvector
-      2. Gemini 1.5 Flash generates a JSON-structured answer
+      2. Gemini 1.5 Flash generates a structured JSON answer
       3. Critic Agent scores faithfulness (semantic cosine similarity)
       4. If score < 0.6, Groq/Llama-3 regenerates with a stricter prompt
-      5. Returns answer + faithfulness score + source citations
+      5. Returns answer + faithfulness score + source citations + RAGAS metrics
     """
     try:
-        logger.info("RAG query from user '%s': '%s'", user_id, question[:80])
+        logger.info("RAG query (user=%s): '%s'", user_id, question[:80])
         result = get_verified_answer(query=question, user_id=user_id)
         return {
             "question":            question,
@@ -132,29 +127,27 @@ def rag_query(question: str, user_id: str = "public") -> dict:
 
 @mcp.tool()
 def list_documents() -> dict:
-    """List all indexed medical documents with chunk counts (single query, N+1-safe)."""
+    """List all indexed medical documents with chunk counts (N+1-safe)."""
     try:
         docs = Document.objects.annotate(
             total_chunks=Count("documentchunk")
         ).order_by("-created_at")
 
-        documents_list = [
-            {
-                "id":           str(doc.id),
-                "title":        doc.title,
-                "file_name":    doc.file.name if doc.file else "N/A",
-                "file_size_kb": round((doc.file.size / 1024), 1) if doc.file else 0,
-                "chunk_count":  doc.total_chunks,
-                "status":       getattr(doc, "status", "processed"),
-                "created_at":   doc.created_at.isoformat() if doc.created_at else None,
-            }
-            for doc in docs
-        ]
-
         return {
-            "total_documents": len(documents_list),
-            "documents":       documents_list,
-            "status":          "success",
+            "total_documents": docs.count(),
+            "documents": [
+                {
+                    "id":           str(doc.id),
+                    "title":        doc.title,
+                    "file_name":    doc.file.name if doc.file else "N/A",
+                    "file_size_kb": round((doc.file.size / 1024), 1) if doc.file else 0,
+                    "chunk_count":  doc.total_chunks,
+                    "status":       getattr(doc, "status", "processed"),
+                    "created_at":   doc.created_at.isoformat() if doc.created_at else None,
+                }
+                for doc in docs
+            ],
+            "status": "success",
         }
     except Exception as e:
         logger.error("list_documents error: %s", e, exc_info=True)
@@ -168,7 +161,6 @@ def get_document_chunks(doc_id: str, limit: int = 10) -> dict:
         limit = max(1, min(int(limit), 50))
         doc   = Document.objects.get(id=doc_id)
         chunks = doc.documentchunk_set.all()[:limit]
-
         return {
             "document_id":    str(doc.id),
             "document_title": doc.title,
@@ -191,7 +183,7 @@ def get_document_chunks(doc_id: str, limit: int = 10) -> dict:
 
 @mcp.tool()
 def get_rag_metrics() -> dict:
-    """Return live system health metrics and model configuration."""
+    """Live system health metrics and model configuration."""
     try:
         return {
             "total_records":          Document.objects.count(),
@@ -202,6 +194,7 @@ def get_rag_metrics() -> dict:
             "vector_store":           "PostgreSQL 16 + pgvector",
             "deployment_platform":    "GCP Cloud Run",
             "mcp_transport":          "Streamable HTTP (spec 2025-03-26)",
+            "faithfulness_threshold": 0.6,
             "status":                 "success",
         }
     except Exception as e:
