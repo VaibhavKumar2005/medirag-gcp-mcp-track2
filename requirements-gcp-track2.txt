@@ -1,78 +1,85 @@
-# VeriRAG GCP Track 2 - Python Dependencies
-# Add to apps/backend/requirements.txt
+# MediRAG GCP Track 2 — Top-level dependency manifest
+# Last security audit: March 2026
+#
+# This file mirrors apps/backend/requirements.txt.
+# All packages are pinned to minimum safe versions resolving all Dependabot alerts.
 
-# Core Framework
-Django==5.0.0
-djangorestframework==3.14.0
-django-cors-headers==4.3.0
+# ── gRPC — pinned for Cloud Build ────────────────────────────────────────────
+grpcio==1.60.0
+grpcio-status==1.60.0
 
-# Database & ORM
-psycopg2-binary==2.9.9
-pgvector==0.3.1
-sqlalchemy==2.0.23
+# ── Core framework ────────────────────────────────────────────────────────────
+# Django 5.1.9: fixes critical SQL injection ×2, path traversal, DoS ×7,
+#               user enumeration ×2, log injection, ReDoS
+Django==5.1.9
+djangorestframework==3.15.2
+django-cors-headers==4.6.0
 
-# GCP Services
-google-cloud-bigquery==3.14.1
-google-cloud-storage==2.10.0
-google-cloud-firestore==2.12.0
-google-cloud-aiplatform==1.40.0
-google-auth==2.25.2
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+sqlalchemy==2.0.36
+
+# ── GCP services ─────────────────────────────────────────────────────────────
+# google-cloud-aiplatform 1.77.0: fixes predictable bucket naming (HIGH)
+google-cloud-aiplatform==1.77.0
+google-cloud-secret-manager==2.21.1
+google-cloud-bigquery==3.27.0
+google-cloud-storage==2.19.0
+google-cloud-firestore==2.20.0
+google-auth==2.38.0
 google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
+google-auth-oauthlib==1.2.1
 
-# MCP (Model Context Protocol)
-mcp>=0.7.0
-fastmcp>=0.1.0
+# ── Google Generative AI ──────────────────────────────────────────────────────
+google-generativeai>=0.8.0
+langchain-google-genai>=2.0.0
 
-# LLM Integration
-google-generativeai>=0.3.0
-anthropic==0.7.10
+# ── MCP ───────────────────────────────────────────────────────────────────────
+mcp>=1.0.0
+fastmcp>=2.0.0
 
-# Web Server
-gunicorn==21.2.0
-uvicorn[standard]==0.24.0
+# ── Web server ────────────────────────────────────────────────────────────────
+# gunicorn 23.0.0: fixes HTTP request/response smuggling ×2 (HIGH)
+gunicorn==23.0.0
+uvicorn[standard]==0.34.0
 
-# API & Serialization
-pydantic==2.4.2
-pydantic-settings==2.1.0
-requests==2.31.0
-httpx==0.25.2
+# ── JWT & auth ────────────────────────────────────────────────────────────────
+djangorestframework-simplejwt==5.4.0
+# PyJWT 2.10.1: fixes unknown crit header extensions (HIGH)
+PyJWT==2.10.1
 
-# Utilities
-python-dotenv==1.0.0
+# ── Security ─────────────────────────────────────────────────────────────────
+# cryptography 44.0.2: fixes Bleichenbacher timing, NULL deref ×2,
+#                      SECT subgroup attack, vulnerable OpenSSL
+cryptography==44.0.2
+
+# ── Pillow ────────────────────────────────────────────────────────────────────
+# Pillow 11.1.0: fixes arbitrary code execution (CRITICAL), buffer overflow (HIGH)
+Pillow==11.1.0
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+# requests 2.32.3: fixes Session verify bypass + .netrc credential leak
+requests==2.32.3
+httpx==0.28.1
+
+# ── API / serialisation ───────────────────────────────────────────────────────
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
 python-decouple==3.8
-Pillow==10.1.0
+aiofiles==24.1.0
 
-# Async Support
-asyncio==3.4.3
-aiofiles==23.2.1
+# ── Logging & monitoring ──────────────────────────────────────────────────────
+python-json-logger==3.2.1
+prometheus-client==0.21.1
+django-prometheus==2.3.1
 
-# Logging & Monitoring
-python-json-logger==2.0.7
-prometheus-client==0.18.0
-
-# Security
-cryptography==41.0.7
-pyjwt==2.8.1
-
-# Testing
-pytest==7.4.3
-pytest-django==4.7.0
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-factory-boy==3.3.0
-
-# Code Quality
-black==23.12.0
-flake8==6.1.0
+# ── Code quality ──────────────────────────────────────────────────────────────
+# black 25.1.0: fixes arbitrary file write (HIGH) + ReDoS (MODERATE)
+black==25.1.0
+flake8==7.1.1
 isort==5.13.2
-mypy==1.7.1
-
-# Development
-django-debug-toolbar==4.2.0
-django-extensions==3.2.3
-ipython==8.18.1
-
-# Optional: For local development
-docker==7.0.0
-docker-compose==1.29.2
+mypy==1.14.1
