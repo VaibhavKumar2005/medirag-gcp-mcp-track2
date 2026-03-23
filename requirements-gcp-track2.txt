@@ -29,7 +29,7 @@ google-generativeai>=0.3.0
 anthropic==0.7.10
 
 # Web Server
-gunicorn==21.2.0
+gunicorn==22.0.0
 uvicorn[standard]==0.24.0
 
 # API & Serialization
