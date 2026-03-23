@@ -1,17 +1,14 @@
 """
-Django settings for VeriRag project.
-Refactored for Google Cloud Run - Track 2 Submission.
+Django settings for MediRAG — GCP Cloud Run, Track 2 submission.
 """
 import os
 import secrets
 from pathlib import Path
 from datetime import timedelta
 
-# Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- 1. CORE SECURITY ---
-# In Cloud Run, these are injected via environment variables or Secret Manager
+# ── 1. Security ──────────────────────────────────────────────────────────────
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
@@ -20,16 +17,15 @@ if not SECRET_KEY and not DEBUG:
 elif not SECRET_KEY:
     SECRET_KEY = secrets.token_urlsafe(50)
 
-# Allow local dev and the Google Cloud Run generated URLs
 ALLOWED_HOSTS = [
-    'localhost', 
-    '127.0.0.1', 
-    '0.0.0.0', 
-    '.a.run.app', # Wildcard for all Cloud Run services in your project
-    os.environ.get('CLOUDRUN_SERVICE_URL', '').replace('https://', '')
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '.a.run.app',
+    os.environ.get('CLOUDRUN_SERVICE_URL', '').replace('https://', ''),
 ]
 
-# --- 2. APPLICATION DEFINITION ---
+# ── 2. Application ───────────────────────────────────────────────────────────
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -57,25 +53,26 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'rag_backend.urls'
 WSGI_APPLICATION = 'rag_backend.wsgi.application'
 
-# --- 3. DATABASE (PostgreSQL / Cloud SQL) ---
-# Cloud Run typically connects via Unix Sockets or public IP with Auth
+# ── 3. Database (PostgreSQL + pgvector) ──────────────────────────────────────
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'verirag_db'),
-        'USER': os.environ.get('POSTGRES_USER', 'admin'),
+        'NAME':     os.environ.get('POSTGRES_DB',       'medirag_db'),
+        'USER':     os.environ.get('POSTGRES_USER',     'admin'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
-        # CRITICAL for Cloud Run: close DB connections after each request.
-        # Cloud Run scales to N instances simultaneously; without this, each
-        # instance holds persistent connections and PostgreSQL max_connections
-        # (default 100) is exhausted under load.
+        'HOST':     os.environ.get('POSTGRES_HOST',     'localhost'),
+        'PORT':     os.environ.get('POSTGRES_PORT',     '5432'),
+        # Cloud Run: prevent connection pool exhaustion under horizontal scale
         'CONN_MAX_AGE': 0,
     }
 }
 
-# --- 4. AUTHENTICATION (JWT & OAuth) ---
+# ── 4. GCP Configuration ─────────────────────────────────────────────────────
+GCP_PROJECT_ID  = os.environ.get('GCP_PROJECT_ID',  '')
+GEMINI_MODEL    = os.environ.get('GEMINI_MODEL',    'gemini-1.5-flash')
+EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'models/text-embedding-004')
+
+# ── 5. Authentication ────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -86,23 +83,31 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),
+    'ACCESS_TOKEN_LIFETIME':  timedelta(hours=2),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_TYPES':      ('Bearer',),
 }
 
-# --- 5. NETWORKING (CORS & CSRF) ---
-CORS_ALLOW_ALL_ORIGINS = True  # Simplified for competition; restrict in real production
+# ── 6. Demo mode ─────────────────────────────────────────────────────────────
+# When True, GET /api/demo/token returns a JWT without a password so judges
+# can explore the full app without creating an account.
+# Set DEMO_MODE=False in production.
+DEMO_MODE          = os.environ.get('DEMO_MODE',          'True').lower() in ('true', '1', 'yes')
+DEMO_USER_EMAIL    = os.environ.get('DEMO_USER_EMAIL',    'demo@medirag.dev')
+DEMO_USER_PASSWORD = os.environ.get('DEMO_USER_PASSWORD', 'MediRAG-Demo-2025!')
+
+# ── 7. Networking ────────────────────────────────────────────────────────────
+CORS_ALLOW_ALL_ORIGINS = True  # Restrict to FRONTEND_URL in production
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.a.run.app',
-    os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+    os.environ.get('FRONTEND_URL', 'http://localhost:5173'),
 ]
 
-# --- 6. STATIC & MEDIA ---
-STATIC_URL = 'static/'
+# ── 8. Static & media ────────────────────────────────────────────────────────
+STATIC_URL  = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL   = '/media/'
+MEDIA_ROOT  = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
