@@ -1,0 +1,59 @@
+# ── Secrets & credentials ────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+*.key
+*-key.json
+secrets.json
+credentials.json
+api_keys.txt
+.secrets/
+vault/
+vault_keys.txt
+
+# ── Tests & dev tooling ──────────────────────────────────────────────────────
+tests/
+pytest.ini
+requirements-dev.txt
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+test_llm.py
+validate_changes.py
+
+# ── Local-only build artefacts ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# ── Git & editor state ────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# ── IDE & OS noise ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Local media uploads (mounted as a volume in prod) ────────────────────────
+media/
+
+# ── Static files (collected inside the container at startup) ─────────────────
+staticfiles/
+
+# ── Pip install leftovers that sometimes land in source dirs ─────────────────
+=0.1.0
+=1.3.0
+=2.10.0

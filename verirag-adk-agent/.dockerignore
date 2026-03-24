@@ -1,0 +1,29 @@
+# ── Secrets & credentials ────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+*.key
+*-key.json
+secrets.json
+credentials.json
+.secrets/
+
+# ── Git & editor state ────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# ── IDE & OS noise ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Python noise ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage

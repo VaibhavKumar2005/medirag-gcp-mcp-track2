@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -31,32 +31,42 @@ LABEL maintainer="Vaibhav Kumar" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+# poppler-utils required by pdf2image for OCR on scanned clinical documents
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Security: Run as non-root user
 RUN groupadd -r verirag && useradd -r -g verirag -d /app -s /sbin/nologin verirag
 
 WORKDIR /app
-COPY --chown=verirag:verirag . .
+
+# Explicit copies — tests, .env, oidc_cred.json and dev tooling stay out
+COPY --chown=verirag:verirag mcp_server.py    ./mcp_server.py
+COPY --chown=verirag:verirag requirements.txt  ./requirements.txt
+COPY --chown=verirag:verirag rag_backend/      ./rag_backend/
+COPY --chown=verirag:verirag ai_engine/        ./ai_engine/
+COPY --chown=verirag:verirag librarian/        ./librarian/
+COPY --chown=verirag:verirag verifier/         ./verifier/
 
 RUN mkdir -p /app/media/pdfs /app/staticfiles \
     && chown -R verirag:verirag /app
 
 USER verirag
+
+# PORT injected by Cloud Run; default 8000 matches workflow --port=8000
 EXPOSE 8000
 
-# Cloud Run Health Check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 STOPSIGNAL SIGTERM
 
-# CRITICAL: Launch the FastAPI MCP Server, NOT Django/Gunicorn
-CMD ["uvicorn", "mcp_server:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "1", "--log-level", "info"]
+CMD ["sh", "-c", "uvicorn mcp_server:app \
+     --host 0.0.0.0 \
+     --port ${PORT:-8000} \
+     --workers 1 \
+     --log-level info"]

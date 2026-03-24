@@ -12,8 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# No C-extension deps needed for the ADK agent (pure Python stack)
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -31,14 +30,12 @@ LABEL maintainer="Vaibhav Kumar" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed packages from builder stage
 COPY --from=builder /install /usr/local
 
-# Security: non-root user
 RUN groupadd -r medirag && useradd -r -g medirag -d /app -s /sbin/nologin medirag
 
 WORKDIR /app
@@ -46,20 +43,18 @@ COPY --chown=medirag:medirag . .
 
 USER medirag
 
-# Cloud Run injects PORT=8080; expose it here for documentation
+# PORT injected by Cloud Run; default 8080 matches workflow --port=8080
+# The app code already reads PORT from env (verirag_adk_agent.py:194) —
+# the CMD here must match so Docker EXPOSE and uvicorn agree.
 EXPOSE 8080
 
-# Health check — Cloud Run probes /health before routing traffic
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 STOPSIGNAL SIGTERM
 
-# Uvicorn binds to the module-level `app` object in verirag_adk_agent.py
-# --host 0.0.0.0  required by Cloud Run (container must accept external traffic)
-# --workers 1     ADK agent is stateful; do not fork multiple workers
-CMD ["uvicorn", "verirag_adk_agent:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8080", \
-     "--workers", "1", \
-     "--log-level", "info"]
+CMD ["sh", "-c", "uvicorn verirag_adk_agent:app \
+     --host 0.0.0.0 \
+     --port ${PORT:-8080} \
+     --workers 1 \
+     --log-level info"]
