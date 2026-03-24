@@ -71,8 +71,12 @@ PyJWT==2.10.1
 #   MODERATE: vulnerable OpenSSL in cryptography wheels
 cryptography==44.0.2
 
-# ── Pillow ────────────────────────────────────────────────────────────────────
-# Pillow 11.1.0 fixes:
+# ── OCR — scanned and aged clinical documents ─────────────────────────────────
+# pdf2image converts PDF pages to PIL images for Vision API
+# google-cloud-vision performs OCR (printed + semi-handwritten, 60+ languages)
+# poppler-utils is a system dependency — installed in Dockerfile, not here
+pdf2image==1.17.0
+google-cloud-vision==3.7.2
 #   CRITICAL: arbitrary code execution via crafted images
 #   HIGH: buffer overflow vulnerability
 Pillow==11.1.0

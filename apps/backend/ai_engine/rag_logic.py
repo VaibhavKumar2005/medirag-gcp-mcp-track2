@@ -258,17 +258,59 @@ def ingest_document(doc_id):
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found at {file_path}")
 
+        # ── Smart text extraction ──────────────────────────────────────────
+        # PyPDF first — if pages have real text, use it directly.
+        # If pages are mostly empty (scanned/aged document), switch to
+        # Cloud Vision OCR which handles mixed-language, handwritten,
+        # and low-quality scans common in APAC clinical records.
+        from ai_engine.ocr_utils import extract_text_from_pdf
+
         loader   = PyPDFLoader(file_path)
         raw_docs = loader.load()
-        if not raw_docs:
-            raise ValueError("PDF extraction returned no content")
-        logger.info("Extracted %d pages", len(raw_docs))
+
+        extracted = extract_text_from_pdf(file_path, raw_docs)
+        if not extracted:
+            raise ValueError(
+                "Text extraction returned no content — "
+                "file may be corrupted or an unsupported format"
+            )
+
+        # Log extraction method so we can track OCR usage in monitoring
+        sources     = set(p['source'] for p in extracted)
+        avg_conf    = sum(p['confidence'] for p in extracted) / len(extracted)
+        used_ocr    = 'vision_ocr' in sources
+        logger.info(
+            "Extracted %d pages via %s (avg confidence: %.2f)%s",
+            len(extracted),
+            '/'.join(sorted(sources)),
+            avg_conf,
+            " — OCR used for scanned document" if used_ocr else "",
+        )
+
+        # Convert extracted pages back to LangChain Document format
+        # so the rest of the pipeline (chunking, embedding) is unchanged
+        from langchain_core.documents import Document as LCDocument
+        lc_docs = [
+            LCDocument(
+                page_content=p['text'],
+                metadata={
+                    'page':            p['page_number'],
+                    'source':          file_path,
+                    'extraction':      p['source'],
+                    'ocr_confidence':  p.get('confidence', 1.0),
+                }
+            )
+            for p in extracted
+            if p['text'].strip()
+        ]
+        if not lc_docs:
+            raise ValueError("All pages were empty after extraction")
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000, chunk_overlap=200, length_function=len,
             separators=["\n\n", "\n", ". ", " ", ""],
         )
-        chunks = splitter.split_documents(raw_docs)
+        chunks = splitter.split_documents(lc_docs)
         logger.info("Split into %d chunks", len(chunks))
         doc.total_chunks = len(chunks)
         doc.save(update_fields=["total_chunks"])
