@@ -8,10 +8,14 @@ on:
 env:
   GCP_PROJECT_ID: project-5f9ff1f2-755e-4532-bcd
   GCP_REGION: us-central1
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Opt in before June 2026 forced migration
+  MCP_IMAGE: gcr.io/project-5f9ff1f2-755e-4532-bcd/verirag-mcp
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # opt in before June 2026 forced migration
 
 jobs:
-  # ── Job 1: MCP Server (Django + FastAPI + FastMCP) ─────────────────────────
+  # ── Job 1: MCP Server (FastAPI + FastMCP) ─────────────────────────────────
+  # Uses an explicit build → deploy split because Cloud Run's --source flag
+  # does not accept --dockerfile. We tell Cloud Build which Dockerfile to use
+  # via cloudbuild.yaml, then deploy the resulting image.
   deploy-mcp-server:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
@@ -19,7 +23,7 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      mcp_url: ${{ steps.deploy.outputs.url }}
+      mcp_url: ${{ steps.get-url.outputs.url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,26 +32,46 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
         with:
-          service: verirag-mcp-server
-          source: ./apps/backend
-          region: ${{ env.GCP_REGION }}
-          flags: >-
-            --dockerfile=Dockerfile.mcp
-            --allow-unauthenticated
-            --port=8000
-            --cpu=4
-            --memory=8Gi
-            --no-cpu-throttling
-            --min-instances=1
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      # Build Dockerfile.mcp via Cloud Build.
+      # cloudbuild.yaml passes $_IMAGE as a substitution so the tag is
+      # consistent between build and deploy steps.
+      - name: Build MCP image with Cloud Build
+        working-directory: ./apps/backend
+        run: |
+          gcloud builds submit \
+            --config=cloudbuild.yaml \
+            --substitutions="_IMAGE=${{ env.MCP_IMAGE }}:${{ github.sha }}" \
+            .
+
+      # Deploy the image — no --source, no --dockerfile, no ambiguity.
+      - name: Deploy MCP Server to Cloud Run
+        run: |
+          gcloud run deploy verirag-mcp-server \
+            --image="${{ env.MCP_IMAGE }}:${{ github.sha }}" \
+            --region="${{ env.GCP_REGION }}" \
+            --allow-unauthenticated \
+            --port=8000 \
+            --cpu=4 \
+            --memory=8Gi \
+            --no-cpu-throttling \
+            --min-instances=1 \
             --cpu-boost
 
+      - name: Get MCP Server URL
+        id: get-url
+        run: |
+          URL=$(gcloud run services describe verirag-mcp-server \
+            --region="${{ env.GCP_REGION }}" \
+            --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "MCP Server deployed at: $URL"
+
   # ── Job 2: ADK Agent ──────────────────────────────────────────────────────
-  # Deploys using `adk deploy cloud_run` — the canonical codelab pattern.
-  # --with_ui serves the ADK developer UI at the Cloud Run URL so judges
-  # can interact with the agent directly in their browser.
   deploy-adk-agent:
     name: Deploy ADK Agent
     runs-on: ubuntu-latest
@@ -73,7 +97,7 @@ jobs:
       - name: Install ADK
         run: pip install google-adk>=1.0.0
 
-      - name: Deploy ADK agent with adk deploy cloud_run
+      - name: Deploy ADK agent
         working-directory: ./verirag-adk-agent
         env:
           MCP_SERVER_URL: ${{ needs.deploy-mcp-server.outputs.mcp_url }}/mcp
@@ -95,11 +119,11 @@ jobs:
             --min-instances=0 \
             --max-instances=10
 
-      - name: Get deployed service URL
+      - name: Get ADK Agent URL
         id: get-url
         run: |
           URL=$(gcloud run services describe medirag-agent \
-            --region=${{ env.GCP_REGION }} \
+            --region="${{ env.GCP_REGION }}" \
             --format='value(status.url)')
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "ADK Agent deployed at: $URL"
@@ -125,7 +149,6 @@ jobs:
           service: verirag-frontend
           source: ./apps/frontend
           region: ${{ env.GCP_REGION }}
-          # --port=8080 matches nginx listen 8080 in apps/frontend/Dockerfile
           flags: >-
             --allow-unauthenticated
             --port=8080
