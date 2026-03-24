@@ -1,5 +1,5 @@
 ###############################################################################
-# VeriRAG Backend — Optimized Multi-Stage Dockerfile for Google Cloud Run
+# VeriRAG Backend — Multi-Stage Dockerfile for Google Cloud Run
 ###############################################################################
 
 # ── Stage 1: Builder ────────────────────────────────────────────────────────
@@ -11,8 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# Install build dependencies for PostgreSQL (psycopg2)
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+# Build deps only — no apt-get upgrade (non-reproducible; security patches
+# come from rebasing on a new python:3.11-slim digest in CI)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -32,39 +33,45 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=rag_backend.settings
 
-# Install runtime dependencies
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Security: Run as non-root user
 RUN groupadd -r verirag && useradd -r -g verirag -d /app -s /sbin/nologin verirag
 
 WORKDIR /app
-COPY --chown=verirag:verirag . .
 
-# Create required directories for local assets
+# Explicit copies instead of COPY . . — nothing outside this list ships
+COPY --chown=verirag:verirag manage.py        ./manage.py
+COPY --chown=verirag:verirag mcp_server.py    ./mcp_server.py
+COPY --chown=verirag:verirag setup_pgvector.py ./setup_pgvector.py
+COPY --chown=verirag:verirag oidc_cred.json   ./oidc_cred.json
+COPY --chown=verirag:verirag requirements.txt  ./requirements.txt
+COPY --chown=verirag:verirag rag_backend/      ./rag_backend/
+COPY --chown=verirag:verirag ai_engine/        ./ai_engine/
+COPY --chown=verirag:verirag librarian/        ./librarian/
+COPY --chown=verirag:verirag verifier/         ./verifier/
+
 RUN mkdir -p /app/media/pdfs /app/staticfiles \
     && chown -R verirag:verirag /app
 
 USER verirag
+
+# PORT is injected by Cloud Run; default 8000 for local docker-compose
 EXPOSE 8000
 
-# Cloud Run Health Check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health/ || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/api/health/ || exit 1
 
 STOPSIGNAL SIGTERM
 
-# Gunicorn optimized for Cloud Run
-CMD ["gunicorn", "rag_backend.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "2", \
-     "--timeout", "60", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["sh", "-c", "gunicorn rag_backend.wsgi:application \
+     --bind 0.0.0.0:${PORT:-8000} \
+     --workers 2 \
+     --timeout 60 \
+     --access-logfile - \
+     --error-logfile -"]
