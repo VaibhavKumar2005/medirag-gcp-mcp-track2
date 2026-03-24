@@ -45,6 +45,9 @@ jobs:
             --cpu-boost
 
   # ── Job 2: ADK Agent ──────────────────────────────────────────────────────
+  # Deploys using `adk deploy cloud_run` — the canonical codelab pattern.
+  # --with_ui serves the ADK developer UI at the Cloud Run URL so judges
+  # can interact with the agent directly in their browser.
   deploy-adk-agent:
     name: Deploy ADK Agent
     runs-on: ubuntu-latest
@@ -53,7 +56,7 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      agent_url: ${{ steps.deploy.outputs.url }}
+      agent_url: ${{ steps.get-url.outputs.url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,24 +65,44 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
         with:
-          service: verirag-adk-agent
-          source: ./verirag-adk-agent
-          region: ${{ env.GCP_REGION }}
-          # --dockerfile points Cloud Build to verirag-adk-agent/Dockerfile
-          # --port=8080 matches the Dockerfile EXPOSE and uvicorn CMD port
-          flags: >-
-            --dockerfile=Dockerfile
-            --allow-unauthenticated
-            --port=8080
-            --cpu=2
-            --memory=2Gi
-            --min-instances=0
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Install ADK
+        run: pip install google-adk>=1.0.0
+
+      - name: Deploy ADK agent with adk deploy cloud_run
+        working-directory: ./verirag-adk-agent
+        env:
+          MCP_SERVER_URL: ${{ needs.deploy-mcp-server.outputs.mcp_url }}/mcp
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_LOCATION: ${{ env.GCP_REGION }}
+        run: |
+          adk deploy cloud_run medirag_agent \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --region=${{ env.GCP_REGION }} \
+            --with_ui \
+            --app_name=medirag-agent \
+            --set-env-vars="MCP_SERVER_URL=${MCP_SERVER_URL}" \
+            --set-secrets="GOOGLE_API_KEY=google-api-key:latest" \
+            -- \
+            --allow-unauthenticated \
+            --cpu=2 \
+            --memory=2Gi \
+            --min-instances=0 \
             --max-instances=10
-          env_vars: |
-            MCP_SERVER_URL=${{ needs.deploy-mcp-server.outputs.mcp_url }}
+
+      - name: Get deployed service URL
+        id: get-url
+        run: |
+          URL=$(gcloud run services describe medirag-agent \
+            --region=${{ env.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "ADK Agent deployed at: $URL"
 
   # ── Job 3: React Frontend (Nginx) ─────────────────────────────────────────
   deploy-frontend:

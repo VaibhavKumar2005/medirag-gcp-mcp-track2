@@ -1,89 +1,140 @@
-# VeriRAG GCP Track 2 - Python Dependencies
-# Add to apps/backend/requirements.txt
+# MediRAG GCP Track 2 — Python Dependencies
+# Last security audit: March 2026
+# All packages pinned to minimum safe version resolving Dependabot alerts.
 
-# gRPC — pinned to force pre-compiled manylinux wheels on Cloud Build
-# Without this, Cloud Build compiles grpcio from C++ source and times out
+# ── gRPC — pinned for Cloud Build ────────────────────────────────────────────
+# Forces pre-compiled manylinux wheels — without this Cloud Build compiles
+# grpcio from C++ source and times out after ~15 minutes.
 grpcio==1.60.0
 grpcio-status==1.60.0
 
-# Core Framework
-Django==5.0.0
-djangorestframework==3.14.0
-django-cors-headers==4.3.0
+# ── Core framework ────────────────────────────────────────────────────────────
+# Django 5.1.9 fixes:
+#   CRITICAL: SQL injection via _connector keyword (CVE-2025-26699)
+#   CRITICAL: SQL injection via .annotate() column aliases
+#   HIGH:     path traversal, DoS via urlize/urlizetrunc, intcomma filter DoS
+#   HIGH:     HttpResponseRedirect DoS on Windows
+#   MODERATE: urlize DoS, memory consumption, user enumeration ×2,
+#             IPv6 validation DoS, strip_tags() DoS, log injection, ReDoS
+Django==5.1.9
 
-# Database & ORM
-psycopg2-binary==2.9.9
-pgvector==0.3.1
-sqlalchemy==2.0.23
+# djangorestframework 3.15.2 fixes:
+#   LOW: XSS vulnerability (CVE-2024-21520)
+djangorestframework==3.15.2
+django-cors-headers==4.6.0
 
-# GCP Services (replaces Azure OpenAI / Azure Search / Azure Key Vault)
-google-cloud-bigquery==3.14.1
-google-cloud-storage==2.10.0
-google-cloud-firestore==2.12.0
-google-cloud-aiplatform==1.40.0
-google-cloud-secret-manager==2.18.2
-google-auth==2.25.2
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+sqlalchemy==2.0.36
+
+# ── GCP services ─────────────────────────────────────────────────────────────
+# google-cloud-aiplatform 1.77.0 fixes:
+#   HIGH: predictable bucket naming vulnerability
+google-cloud-aiplatform==1.77.0
+google-cloud-secret-manager==2.21.1
+google-cloud-bigquery==3.27.0
+google-cloud-storage==2.19.0
+google-cloud-firestore==2.20.0
+google-auth==2.38.0
 google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
+google-auth-oauthlib==1.2.1
 
-# Google Generative AI — Gemini 1.5 Flash + text-embedding-004
-google-generativeai>=0.7.0
-langchain-google-genai>=1.0.0
+# ── Google Generative AI — Gemini 1.5 Flash + text-embedding-004 ─────────────
+google-generativeai>=0.8.0
+langchain-google-genai>=2.0.0
 
-# MCP (Model Context Protocol)
-mcp>=0.7.0
-fastmcp>=0.1.0
+# ── MCP (Model Context Protocol) ─────────────────────────────────────────────
+mcp>=1.0.0
+fastmcp>=2.0.0
 
-# LLM Integration
-# NOTE: google-generativeai is listed above under GCP Services
-# Groq uses the openai-compatible SDK (OpenAI package, Groq base_url)
-# anthropic removed — not used in this project
+# ── Web server ────────────────────────────────────────────────────────────────
+# gunicorn 23.0.0 fixes:
+#   HIGH: HTTP request/response smuggling (CVE-2024-1135, CVE-2024-6827)
+gunicorn==23.0.0
+uvicorn[standard]==0.34.0
 
-# Web Server
-gunicorn==21.2.0
-uvicorn[standard]==0.24.0
+# ── JWT & auth ────────────────────────────────────────────────────────────────
+# djangorestframework-simplejwt
+djangorestframework-simplejwt==5.4.0
 
-# API & Serialization
-pydantic==2.4.2
-pydantic-settings==2.1.0
-requests==2.31.0
-httpx==0.25.2
+# PyJWT 2.10.1 fixes:
+#   HIGH: unknown `crit` header extensions accepted (CVE-2024-53861)
+PyJWT==2.10.1
 
-# Utilities
-python-dotenv==1.0.0
+# ── Security / cryptography ───────────────────────────────────────────────────
+# cryptography 44.0.2 fixes:
+#   HIGH: Bleichenbacher timing oracle on SECT curves
+#   HIGH: NULL pointer dereference in PKCS12 parsing
+#   HIGH: subgroup attack missing validation for SECT curves
+#   MODERATE: NULL deref in pkcs12.serialize_key_and_certificates
+#   MODERATE: vulnerable OpenSSL in cryptography wheels
+cryptography==44.0.2
+
+# ── OCR — scanned and aged clinical documents ─────────────────────────────────
+# pdf2image converts PDF pages to PIL images for Vision API
+# google-cloud-vision performs OCR (printed + semi-handwritten, 60+ languages)
+# poppler-utils is a system dependency — installed in Dockerfile, not here
+pdf2image==1.17.0
+google-cloud-vision==3.7.2
+#   CRITICAL: arbitrary code execution via crafted images
+#   HIGH: buffer overflow vulnerability
+Pillow==11.1.0
+
+# ── HTTP client ──────────────────────────────────────────────────────────────
+# requests 2.32.3 fixes:
+#   MODERATE: Session object doesn't re-verify after verify=False
+#   MODERATE: .netrc credentials leak via malicious URLs
+requests==2.32.3
+httpx==0.28.1
+
+# ── API / serialisation ───────────────────────────────────────────────────────
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# ── Task queue ────────────────────────────────────────────────────────────────
+celery==5.4.0
+redis==5.2.1
+django-celery-beat==2.7.0
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
 python-decouple==3.8
-Pillow==10.1.0
+aiofiles==24.1.0
 
-# Async Support
-asyncio==3.4.3
-aiofiles==23.2.1
+# ── Logging & monitoring ──────────────────────────────────────────────────────
+python-json-logger==3.2.1
+prometheus-client==0.21.1
+django-prometheus==2.3.1
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+drf-spectacular==0.28.0
 
-# Logging & Monitoring
-python-json-logger==2.0.7
-prometheus-client==0.18.0
+# ── OAuth / auth backend ─────────────────────────────────────────────────────
+hvac==2.3.0
 
-# Security
-cryptography==41.0.7
-pyjwt==2.8.1
+# ── Misc backend ─────────────────────────────────────────────────────────────
+pypdf==5.1.0
+langchain==0.3.14
+langchain-community==0.3.14
 
-# Testing
-pytest==7.4.3
-pytest-django==4.7.0
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-factory-boy==3.3.0
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-django==4.9.0
+pytest-asyncio==0.25.2
+pytest-cov==6.0.0
+factory-boy==3.3.1
 
-# Code Quality
-black==23.12.0
-flake8==6.1.0
+# ── Code quality (dev only — safe to remove from production image) ───────────
+# black 25.1.0 fixes:
+#   HIGH: arbitrary file writes via unsanitised cache file names
+#   MODERATE: Regular Expression Denial of Service (ReDoS)
+black==25.1.0
+flake8==7.1.1
 isort==5.13.2
-mypy==1.7.1
+mypy==1.14.1
 
-# Development
-django-debug-toolbar==4.2.0
+# ── Django debug (dev only) ───────────────────────────────────────────────────
+django-debug-toolbar==4.4.6
 django-extensions==3.2.3
-ipython==8.18.1
-
-# Optional: For local development only — DO NOT add docker/docker-compose here.
-# They require a Docker socket (unavailable in Cloud Build) and conflict with pydantic v2.
-# Install locally with: pip install -r requirements-dev.txt
+ipython==8.31.0

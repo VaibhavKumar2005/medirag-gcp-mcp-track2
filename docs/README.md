@@ -1,164 +1,118 @@
-<div align="center">
+# MediRAG — Technical Documentation
 
-# MediRAG — Documentation
-
-**Track 2 · Model Context Protocol · Gen AI Academy APAC Edition**
-
-</div>
+**Track 2 · Model Context Protocol · Gen AI Academy APAC Edition · Team 96**
 
 ---
 
-## Quick links
+## Navigation
 
-| Document | What's inside |
+| Document | Contents |
 |---|---|
-| **[Root README](../README.md)** | Project overview, quickstart, Track 2 alignment |
-| **[Architecture deep-dive](ARCHITECTURE.md)** | Five-stage pipeline, code-level detail, failure modes |
-| **[GCP Setup](../OIDC_SETUP_COMPLETE.md)** | Workload Identity Federation + OIDC configuration |
+| [`/README.md`](../README.md) | Project overview, human problem, how it works, local dev, deployment |
+| [`/SUBMISSION.md`](../SUBMISSION.md) | Judge-facing guide: demo instructions, track requirement checklist |
+| [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) | Deep-dive: pipeline stages, code-level detail, failure modes |
+| [`verirag-adk-agent/README.md`](../verirag-adk-agent/README.md) | ADK agent: deployment, HIPAA controls, API testing |
+| [`/OIDC_SETUP_COMPLETE.md`](../OIDC_SETUP_COMPLETE.md) | GCP Workload Identity Federation setup |
 
 ---
 
-## Try it instantly
+## What the project does
 
-**No account required.** Visit the deployed frontend and click **"Try Demo — No account needed"**.
+A clinician uploads patient PDFs. An AI agent answers clinical questions about them. Every answer is scored for faithfulness against the source documents — answers that don't pass are rejected and regenerated, or the system explicitly refuses to answer.
 
-Three clinical scenarios are pre-indexed and ready:
-
-```
-Scenario 1 — Acute chest pain (penicillin allergy documented)
-  → "What allergies does this patient have?"
-  → "What medications are contraindicated?"
-
-Scenario 2 — Post-CABG discharge summary
-  → "What medications were prescribed on discharge?"
-  → "What follow-up is required?"
-
-Scenario 3 — Comprehensive metabolic panel
-  → "Which lab values were outside normal range?"
-  → "What diagnosis is indicated?"
-```
-
-Or use the API directly:
-
-```bash
-# Get a demo JWT (no password required)
-curl https://verirag-mcp-server-[hash].a.run.app/api/demo/token/
-
-# Seed the clinical scenarios
-curl -X POST https://verirag-mcp-server-[hash].a.run.app/api/demo/seed/ \
-  -H "Authorization: Bearer <token>"
-
-# Ask a clinical question
-curl -X POST https://verirag-mcp-server-[hash].a.run.app/api/query/ \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What allergies does the patient have?"}'
-```
+The MCP layer is the separation of concerns the track requires: the ADK agent handles reasoning, the MCP server handles tool execution and data access. Neither knows the internal implementation of the other.
 
 ---
 
-## Live services
+## The three services
 
-| Service | Cloud Run URL | Health check |
-|---|---|---|
-| **Frontend** | `https://verirag-frontend-[hash].a.run.app` | — |
-| **Django API + MCP** | `https://verirag-mcp-server-[hash].a.run.app` | `/health` |
-| **ADK Agent** | `https://verirag-adk-agent-[hash].a.run.app` | `/health` |
+### MCP Server
 
----
+`apps/backend/mcp_server.py` — FastMCP, Cloud Run, port 8000.
 
-## MCP tools exposed
-
-The MCP Server (`apps/backend/mcp_server.py`) exposes five tools via Streamable HTTP transport:
+Five tools via Streamable HTTP (MCP spec 2025-03-26):
 
 | Tool | What it does |
 |---|---|
-| `search_documents` | Semantic similarity search across pgvector — returns ranked chunks with content previews |
-| `rag_query` | Full dual-agent RAG pipeline — retrieves context, generates answer, scores faithfulness, triggers fallback if needed |
-| `list_documents` | Lists all indexed documents with chunk counts (N+1 safe — single annotated query) |
-| `get_document_chunks` | Returns raw text segments from a specific document |
-| `get_rag_metrics` | Live system health: record counts, active model, embedding dimensions, faithfulness threshold |
+| `search_documents` | Cosine similarity search in pgvector — returns ranked chunks |
+| `rag_query` | Full 5-stage verification pipeline — returns answer + faithfulness score |
+| `list_documents` | All indexed records with chunk counts |
+| `get_document_chunks` | Raw text segments from a specific document |
+| `get_rag_metrics` | Live system health: record counts, active model, threshold |
+
+Health endpoint: `GET /health`
+
+### ADK Agent
+
+`verirag-adk-agent/medirag_agent/agent.py` — google-adk, Cloud Run.
+
+`SequentialAgent` with two sub-agents:
+
+```
+clinical_researcher  (LlmAgent)
+  McpToolset → search_documents, rag_query, get_rag_metrics
+  output_key: "research_findings"
+      ↓
+clinical_formatter  (LlmAgent)
+  reads {research_findings} from shared state
+  formats verified clinical response
+```
+
+Deployed: `adk deploy cloud_run medirag_agent --with_ui`
+
+The `--with_ui` flag serves the ADK developer UI at the Cloud Run URL — judges interact with the agent directly in the browser.
+
+### Frontend
+
+`apps/frontend/src/` — React 19, Vite 7, Cloud Run.
+
+Key components:
+- `PipelineVisualizer.jsx` — 5-stage animation with live cosine similarity meter
+- `ADKAgentPanel.jsx` — MCP tool call viewer, 3-step chain
+- `Dashboard.jsx` — clinical chat, upload, analytics
 
 ---
 
-## Dual-agent verification — the core differentiator
+## Verification pipeline
+
+Defined in `apps/backend/ai_engine/rag_logic.py` → `get_verified_answer()`:
 
 ```
-Gemini 1.5 Flash generates answer
-          ↓
-Critic Agent scores it:
-  • Embeds answer + context with text-embedding-004
-  • Computes cosine similarity
-  • Combined score = 60% self-reported + 40% semantic
-          ↓
-Score ≥ 0.6  →  Return to user with citations
-Score < 0.6  →  Reject → Groq/Llama-3 regenerates with strict prompt
+Query
+  ↓ pgvector similarity_search (k=5, filtered by user_id)
+Retrieve top-5 chunks
+  ↓ Gemini 1.5 Flash (JSON mode, temp=0.1)
+Primary answer + self-reported score
+  ↓ text-embedding-004 embeds answer AND context
+Cosine similarity computed
+  combined = llm_score × 0.6 + semantic × 0.4
+  ↓
+Score ≥ 0.6  →  return answer with citations
+Score < 0.6  →  reject → Groq/Llama-3 strict prompt
+                       → or explicit refusal
 ```
-
-**Why this matters in healthcare:** A system that invents drug dosages, misreports lab results, or fabricates diagnoses isn't just wrong — it's dangerous. MediRAG refuses to answer rather than hallucinate.
 
 ---
 
-## Deployment pipeline
+## Environment variables
 
-```
-Push to track-2-mcp-submission
-          ↓
-GitHub Actions (OIDC — no stored credentials)
-          ↓
-Cloud Build → Docker multi-stage build
-          ↓
-Artifact Registry → Cloud Run deploy
-          ↓
-  ┌───────────────┐
-  │  3 services   │
-  │  MCP Server   │  port 8000  (Django + FastMCP)
-  │  ADK Agent    │  port 8080  (google-adk + FastAPI)
-  │  Frontend     │  port 8080  (React + Nginx)
-  └───────────────┘
-```
+```env
+DJANGO_SECRET_KEY=           # Required
+GOOGLE_API_KEY=              # Required
+GCP_PROJECT_ID=              # Required in cloud mode
 
-Authentication between GitHub Actions and GCP uses **Workload Identity Federation** — short-lived OIDC tokens, no JSON key files stored anywhere.
+POSTGRES_HOST=rag-db
+POSTGRES_DB=medirag_db
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=
+
+GROQ_API_KEY=                # Optional — enables Llama-3 fallback
+GEMINI_MODEL=gemini-1.5-flash
+DEMO_MODE=True
+REDIS_URL=redis://rag-redis:6379/0
+MCP_SERVER_URL=              # ADK agent only — set to MCP Server URL
+```
 
 ---
 
-## Local development
-
-```bash
-git clone https://github.com/VaibhavKumar2005/verirag-gcp-mcp-track2.git
-cd verirag-gcp-mcp-track2
-cp .env.example .env        # Set GOOGLE_API_KEY + DJANGO_SECRET_KEY
-docker compose up --build
-```
-
-| Service | Local URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000/api/ |
-| Swagger UI | http://localhost:8000/api/schema/swagger-ui/ |
-| MCP health | http://localhost:8001/health |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 |
-
----
-
-## Observability
-
-Prometheus metrics at `/metrics`:
-
-| Metric | Description |
-|---|---|
-| `verirag_hallucination_rejections_total` | Responses rejected by the Critic Agent |
-| `verirag_llm_fallbacks_total` | Gemini → Groq failover events |
-| `verirag_queries_total` | Total RAG queries |
-| `verirag_documents_ingested_total` | PDFs vectorized |
-| `verirag_faithfulness_score` | Histogram of combined faithfulness scores |
-| `verirag_active_model` | Currently active LLM (1=Gemini, 2=Groq) |
-
----
-
-<div align="center">
-
-**MediRAG · Team 96 · Gen AI Academy APAC · Track 2**
-
-</div>
+*MediRAG · Team 96 · Gen AI Academy APAC · Track 2*

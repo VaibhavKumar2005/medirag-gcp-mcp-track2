@@ -1,0 +1,6 @@
+# MediRAG ADK Agent — dependencies for adk deploy cloud_run
+# Keep minimal: adk deploy bundles these into the Cloud Run image.
+
+google-adk>=1.0.0
+google-generativeai>=0.8.0
+httpx>=0.25.0
