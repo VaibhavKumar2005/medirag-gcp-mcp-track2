@@ -13,9 +13,6 @@ env:
 
 jobs:
   # ── Job 1: MCP Server (FastAPI + FastMCP) ─────────────────────────────────
-  # Uses an explicit build → deploy split because Cloud Run's --source flag
-  # does not accept --dockerfile. We tell Cloud Build which Dockerfile to use
-  # via cloudbuild.yaml, then deploy the resulting image.
   deploy-mcp-server:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
@@ -31,15 +28,13 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
-      # Build Dockerfile.mcp via Cloud Build.
-      # cloudbuild.yaml passes $_IMAGE as a substitution so the tag is
-      # consistent between build and deploy steps.
       - name: Build MCP image with Cloud Build
         working-directory: ./apps/backend
         run: |
@@ -48,7 +43,6 @@ jobs:
             --substitutions="_IMAGE=${{ env.MCP_IMAGE }}:${{ github.sha }}" \
             .
 
-      # Deploy the image — no --source, no --dockerfile, no ambiguity.
       - name: Deploy MCP Server to Cloud Run
         run: |
           gcloud run deploy verirag-mcp-server \
@@ -88,6 +82,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -143,6 +138,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
 
       - uses: google-github-actions/deploy-cloudrun@v2
         with:
