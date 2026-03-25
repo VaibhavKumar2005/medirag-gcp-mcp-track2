@@ -16,11 +16,11 @@ grpcio-status==1.60.0
 #   HIGH:     HttpResponseRedirect DoS on Windows
 #   MODERATE: urlize DoS, memory consumption, user enumeration ×2,
 #             IPv6 validation DoS, strip_tags() DoS, log injection, ReDoS
-Django==5.1.9
+Django==5.1.15
 
 # djangorestframework 3.15.2 fixes:
 #   LOW: XSS vulnerability (CVE-2024-21520)
-djangorestframework==3.15.2
+djangorestframework==3.17.0
 django-cors-headers==4.6.0
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ sqlalchemy==2.0.36
 # ── GCP services ─────────────────────────────────────────────────────────────
 # google-cloud-aiplatform 1.77.0 fixes:
 #   HIGH: predictable bucket naming vulnerability
-google-cloud-aiplatform==1.77.0
+google-cloud-aiplatform==1.133.0
 google-cloud-secret-manager==2.21.1
 google-cloud-bigquery==3.27.0
 google-cloud-storage==2.19.0
@@ -51,12 +51,12 @@ fastmcp>=2.0.0
 # ── Web server ────────────────────────────────────────────────────────────────
 # gunicorn 23.0.0 fixes:
 #   HIGH: HTTP request/response smuggling (CVE-2024-1135, CVE-2024-6827)
-gunicorn==23.0.0
+gunicorn==25.1.0
 uvicorn[standard]==0.34.0
 
 # ── JWT & auth ────────────────────────────────────────────────────────────────
 # djangorestframework-simplejwt
-djangorestframework-simplejwt==5.4.0
+djangorestframework-simplejwt==5.5.1
 
 # PyJWT 2.10.1 fixes:
 #   HIGH: unknown `crit` header extensions accepted (CVE-2024-53861)
@@ -69,7 +69,7 @@ PyJWT==2.12.0
 #   HIGH: subgroup attack missing validation for SECT curves
 #   MODERATE: NULL deref in pkcs12.serialize_key_and_certificates
 #   MODERATE: vulnerable OpenSSL in cryptography wheels
-cryptography==44.0.2
+cryptography==46.0.5
 
 # ── OCR — scanned and aged clinical documents ─────────────────────────────────
 # pdf2image converts PDF pages to PIL images for Vision API
@@ -79,13 +79,13 @@ pdf2image==1.17.0
 google-cloud-vision==3.7.2
 #   CRITICAL: arbitrary code execution via crafted images
 #   HIGH: buffer overflow vulnerability
-Pillow==11.1.0
+Pillow==12.1.1
 
 # ── HTTP client ──────────────────────────────────────────────────────────────
 # requests 2.32.3 fixes:
 #   MODERATE: Session object doesn't re-verify after verify=False
 #   MODERATE: .netrc credentials leak via malicious URLs
-requests==2.32.3
+requests==2.32.4
 httpx==0.28.1
 
 # ── API / serialisation ───────────────────────────────────────────────────────
@@ -114,9 +114,9 @@ drf-spectacular==0.28.0
 hvac==2.3.0
 
 # ── Misc backend ─────────────────────────────────────────────────────────────
-pypdf==5.1.0
+pypdf==6.9.1
 langchain==0.3.14
-langchain-community==0.3.14
+langchain-community==0.3.27
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.3.4
@@ -129,7 +129,7 @@ factory-boy==3.3.1
 # black 25.1.0 fixes:
 #   HIGH: arbitrary file writes via unsanitised cache file names
 #   MODERATE: Regular Expression Denial of Service (ReDoS)
-black==25.1.0
+black==26.3.1
 flake8==7.1.1
 isort==5.13.2
 mypy==1.14.1
