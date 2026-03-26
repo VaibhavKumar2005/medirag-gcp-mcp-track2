@@ -5,8 +5,8 @@
 # ── gRPC — pinned for Cloud Build ────────────────────────────────────────────
 # Forces pre-compiled manylinux wheels — without this Cloud Build compiles
 # grpcio from C++ source and times out after ~15 minutes.
-grpcio==1.60.0
-grpcio-status==1.60.0
+grpcio==1.67.1
+grpcio-status==1.67.1
 
 # ── Core framework ────────────────────────────────────────────────────────────
 # Django 5.1.9 fixes:
@@ -129,7 +129,7 @@ factory-boy==3.3.1
 # black 25.1.0 fixes:
 #   HIGH: arbitrary file writes via unsanitised cache file names
 #   MODERATE: Regular Expression Denial of Service (ReDoS)
-black==26.3.1
+black==25.1.0
 flake8==7.1.1
 isort==5.13.2
 mypy==1.14.1
