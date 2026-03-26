@@ -12,7 +12,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ── Job 1: MCP Server (FastAPI + FastMCP) ─────────────────────────────────
   deploy-mcp-server:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
@@ -45,7 +44,20 @@ jobs:
             --format='value(id)' \
             .)
           echo "Build submitted: $BUILD_ID"
-          gcloud builds wait "$BUILD_ID" --project=${{ env.GCP_PROJECT_ID }}
+          while true; do
+            STATUS=$(gcloud builds describe "$BUILD_ID" \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format='value(status)')
+            echo "Build status: $STATUS"
+            case "$STATUS" in
+              SUCCESS) echo "Build succeeded!"; break ;;
+              FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR|EXPIRED)
+                echo "Build failed with status: $STATUS"
+                gcloud builds log "$BUILD_ID" --project=${{ env.GCP_PROJECT_ID }} || true
+                exit 1 ;;
+            esac
+            sleep 15
+          done
 
       - name: Deploy MCP Server to Cloud Run
         run: |
@@ -69,7 +81,6 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "MCP Server deployed at: $URL"
 
-  # ── Job 2: ADK Agent ──────────────────────────────────────────────────────
   deploy-adk-agent:
     name: Deploy ADK Agent
     runs-on: ubuntu-latest
@@ -127,7 +138,6 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "ADK Agent deployed at: $URL"
 
-  # ── Job 3: React Frontend (Nginx) ─────────────────────────────────────────
   deploy-frontend:
     name: Deploy React Frontend
     runs-on: ubuntu-latest
