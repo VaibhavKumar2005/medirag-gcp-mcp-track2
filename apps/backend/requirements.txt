@@ -114,7 +114,7 @@ drf-spectacular==0.28.0
 hvac==2.3.0
 
 # ── Misc backend ─────────────────────────────────────────────────────────────
-pypdf==6.9.1
+pypdf==6.9.2
 langchain==0.3.14
 langchain-community==0.3.27
 
