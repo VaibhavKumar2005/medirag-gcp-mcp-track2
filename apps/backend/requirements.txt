@@ -2,9 +2,6 @@
 # Last security audit: March 2026
 
 # ── gRPC — downgraded to keep protobuf<5 compatible with google-cloud-vision ─
-# grpcio-status 1.67.x requires protobuf>=5.26.1 which conflicts with
-# google-cloud-vision 3.7.2 (requires protobuf<5.0.0).
-# Pin to 1.62.x which works with protobuf<5.
 grpcio==1.62.3
 grpcio-status==1.62.3
 
@@ -24,7 +21,6 @@ google-cloud-secret-manager==2.21.1
 google-cloud-bigquery==3.27.0
 google-cloud-storage==2.19.0
 google-cloud-firestore==2.20.0
-# google-cloud-aiplatform 1.133.0 requires google-auth>=2.47.0
 google-auth>=2.47.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.1
@@ -49,8 +45,6 @@ PyJWT==2.12.0
 cryptography==46.0.5
 
 # ── OCR — scanned and aged clinical documents ─────────────────────────────────
-# google-cloud-vision 3.7.2 requires protobuf<5.0.0
-# This is why grpcio is pinned to 1.62.x above
 pdf2image==1.17.0
 google-cloud-vision==3.7.2
 Pillow==12.1.1
@@ -85,8 +79,8 @@ drf-spectacular==0.28.0
 hvac==2.3.0
 
 # ── Misc backend ─────────────────────────────────────────────────────────────
-pypdf==6.9.1
-langchain==0.3.14
+pypdf==6.9.2
+langchain==0.3.26
 langchain-community==0.3.27
 
 # ── Testing ───────────────────────────────────────────────────────────────────
