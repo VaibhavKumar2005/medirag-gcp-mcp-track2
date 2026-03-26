@@ -85,7 +85,7 @@ Pillow==12.1.1
 # requests 2.32.3 fixes:
 #   MODERATE: Session object doesn't re-verify after verify=False
 #   MODERATE: .netrc credentials leak via malicious URLs
-requests==2.32.4
+requests==2.33.0
 httpx==0.28.1
 
 # ── API / serialisation ───────────────────────────────────────────────────────
