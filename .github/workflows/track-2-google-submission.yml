@@ -9,7 +9,7 @@ env:
   GCP_PROJECT_ID: project-5f9ff1f2-755e-4532-bcd
   GCP_REGION: us-central1
   MCP_IMAGE: gcr.io/project-5f9ff1f2-755e-4532-bcd/verirag-mcp
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # opt in before June 2026 forced migration
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ── Job 1: MCP Server (FastAPI + FastMCP) ─────────────────────────────────
@@ -38,10 +38,14 @@ jobs:
       - name: Build MCP image with Cloud Build
         working-directory: ./apps/backend
         run: |
-          gcloud builds submit \
+          BUILD_ID=$(gcloud builds submit \
             --config=cloudbuild.yaml \
             --substitutions="_IMAGE=${{ env.MCP_IMAGE }}:${{ github.sha }}" \
-            .
+            --async \
+            --format='value(id)' \
+            .)
+          echo "Build submitted: $BUILD_ID"
+          gcloud builds wait "$BUILD_ID" --project=${{ env.GCP_PROJECT_ID }}
 
       - name: Deploy MCP Server to Cloud Run
         run: |
@@ -90,7 +94,7 @@ jobs:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
       - name: Install ADK
-        run: pip install google-adk>=1.0.0
+        run: pip install 'google-adk>=1.0.0'
 
       - name: Deploy ADK agent
         working-directory: ./verirag-adk-agent
