@@ -1,25 +1,15 @@
 # MediRAG GCP Track 2 — Python Dependencies
 # Last security audit: March 2026
-# All packages pinned to minimum safe version resolving Dependabot alerts.
 
-# ── gRPC — pinned for Cloud Build ────────────────────────────────────────────
-# Forces pre-compiled manylinux wheels — without this Cloud Build compiles
-# grpcio from C++ source and times out after ~15 minutes.
-grpcio==1.67.1
-grpcio-status==1.67.1
+# ── gRPC — downgraded to keep protobuf<5 compatible with google-cloud-vision ─
+# grpcio-status 1.67.x requires protobuf>=5.26.1 which conflicts with
+# google-cloud-vision 3.7.2 (requires protobuf<5.0.0).
+# Pin to 1.62.x which works with protobuf<5.
+grpcio==1.62.3
+grpcio-status==1.62.3
 
 # ── Core framework ────────────────────────────────────────────────────────────
-# Django 5.1.9 fixes:
-#   CRITICAL: SQL injection via _connector keyword (CVE-2025-26699)
-#   CRITICAL: SQL injection via .annotate() column aliases
-#   HIGH:     path traversal, DoS via urlize/urlizetrunc, intcomma filter DoS
-#   HIGH:     HttpResponseRedirect DoS on Windows
-#   MODERATE: urlize DoS, memory consumption, user enumeration ×2,
-#             IPv6 validation DoS, strip_tags() DoS, log injection, ReDoS
 Django==5.1.15
-
-# djangorestframework 3.15.2 fixes:
-#   LOW: XSS vulnerability (CVE-2024-21520)
 djangorestframework==3.17.0
 django-cors-headers==4.6.0
 
@@ -29,18 +19,17 @@ pgvector==0.3.6
 sqlalchemy==2.0.36
 
 # ── GCP services ─────────────────────────────────────────────────────────────
-# google-cloud-aiplatform 1.77.0 fixes:
-#   HIGH: predictable bucket naming vulnerability
 google-cloud-aiplatform==1.133.0
 google-cloud-secret-manager==2.21.1
 google-cloud-bigquery==3.27.0
 google-cloud-storage==2.19.0
 google-cloud-firestore==2.20.0
+# google-cloud-aiplatform 1.133.0 requires google-auth>=2.47.0
 google-auth>=2.47.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.1
 
-# ── Google Generative AI — Gemini 1.5 Flash + text-embedding-004 ─────────────
+# ── Google Generative AI ─────────────────────────────────────────────────────
 google-generativeai>=0.8.0
 langchain-google-genai>=2.0.0
 
@@ -49,42 +38,24 @@ mcp>=1.0.0
 fastmcp>=2.0.0
 
 # ── Web server ────────────────────────────────────────────────────────────────
-# gunicorn 23.0.0 fixes:
-#   HIGH: HTTP request/response smuggling (CVE-2024-1135, CVE-2024-6827)
 gunicorn==25.1.0
 uvicorn[standard]==0.34.0
 
 # ── JWT & auth ────────────────────────────────────────────────────────────────
-# djangorestframework-simplejwt
 djangorestframework-simplejwt==5.5.1
-
-# PyJWT 2.10.1 fixes:
-#   HIGH: unknown `crit` header extensions accepted (CVE-2024-53861)
 PyJWT==2.12.0
 
 # ── Security / cryptography ───────────────────────────────────────────────────
-# cryptography 44.0.2 fixes:
-#   HIGH: Bleichenbacher timing oracle on SECT curves
-#   HIGH: NULL pointer dereference in PKCS12 parsing
-#   HIGH: subgroup attack missing validation for SECT curves
-#   MODERATE: NULL deref in pkcs12.serialize_key_and_certificates
-#   MODERATE: vulnerable OpenSSL in cryptography wheels
 cryptography==46.0.5
 
 # ── OCR — scanned and aged clinical documents ─────────────────────────────────
-# pdf2image converts PDF pages to PIL images for Vision API
-# google-cloud-vision performs OCR (printed + semi-handwritten, 60+ languages)
-# poppler-utils is a system dependency — installed in Dockerfile, not here
+# google-cloud-vision 3.7.2 requires protobuf<5.0.0
+# This is why grpcio is pinned to 1.62.x above
 pdf2image==1.17.0
 google-cloud-vision==3.7.2
-#   CRITICAL: arbitrary code execution via crafted images
-#   HIGH: buffer overflow vulnerability
 Pillow==12.1.1
 
 # ── HTTP client ──────────────────────────────────────────────────────────────
-# requests 2.32.3 fixes:
-#   MODERATE: Session object doesn't re-verify after verify=False
-#   MODERATE: .netrc credentials leak via malicious URLs
 requests==2.32.4
 httpx==0.28.1
 
@@ -125,11 +96,8 @@ pytest-asyncio==0.25.2
 pytest-cov==6.0.0
 factory-boy==3.3.1
 
-# ── Code quality (dev only — safe to remove from production image) ───────────
-# black 25.1.0 fixes:
-#   HIGH: arbitrary file writes via unsanitised cache file names
-#   MODERATE: Regular Expression Denial of Service (ReDoS)
-black==25.1.0
+# ── Code quality (dev only) ───────────────────────────────────────────────────
+black==26.3.1
 flake8==7.1.1
 isort==5.13.2
 mypy==1.14.1
