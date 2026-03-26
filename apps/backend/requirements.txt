@@ -36,9 +36,9 @@ google-cloud-secret-manager==2.21.1
 google-cloud-bigquery==3.27.0
 google-cloud-storage==2.19.0
 google-cloud-firestore==2.20.0
-google-auth==2.38.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.1
+google-auth>=2.47.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.1
 
 # ── Google Generative AI — Gemini 1.5 Flash + text-embedding-004 ─────────────
 google-generativeai>=0.8.0
