@@ -9,10 +9,9 @@ env:
   GCP_PROJECT_ID: project-5f9ff1f2-755e-4532-bcd
   GCP_REGION: us-central1
   MCP_IMAGE: gcr.io/project-5f9ff1f2-755e-4532-bcd/verirag-mcp
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # opt in before June 2026 forced migration
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ── Job 1: MCP Server (FastAPI + FastMCP) ─────────────────────────────────
   deploy-mcp-server:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
@@ -38,10 +37,27 @@ jobs:
       - name: Build MCP image with Cloud Build
         working-directory: ./apps/backend
         run: |
-          gcloud builds submit \
+          BUILD_ID=$(gcloud builds submit \
             --config=cloudbuild.yaml \
             --substitutions="_IMAGE=${{ env.MCP_IMAGE }}:${{ github.sha }}" \
-            .
+            --async \
+            --format='value(id)' \
+            .)
+          echo "Build submitted: $BUILD_ID"
+          while true; do
+            STATUS=$(gcloud builds describe "$BUILD_ID" \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format='value(status)')
+            echo "Build status: $STATUS"
+            case "$STATUS" in
+              SUCCESS) echo "Build succeeded!"; break ;;
+              FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR|EXPIRED)
+                echo "Build failed with status: $STATUS"
+                gcloud builds log "$BUILD_ID" --project=${{ env.GCP_PROJECT_ID }} || true
+                exit 1 ;;
+            esac
+            sleep 15
+          done
 
       - name: Deploy MCP Server to Cloud Run
         run: |
@@ -65,7 +81,6 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "MCP Server deployed at: $URL"
 
-  # ── Job 2: ADK Agent ──────────────────────────────────────────────────────
   deploy-adk-agent:
     name: Deploy ADK Agent
     runs-on: ubuntu-latest
@@ -90,7 +105,7 @@ jobs:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
       - name: Install ADK
-        run: pip install google-adk>=1.0.0
+        run: pip install 'google-adk>=1.0.0'
 
       - name: Deploy ADK agent
         working-directory: ./verirag-adk-agent
@@ -123,7 +138,6 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "ADK Agent deployed at: $URL"
 
-  # ── Job 3: React Frontend (Nginx) ─────────────────────────────────────────
   deploy-frontend:
     name: Deploy React Frontend
     runs-on: ubuntu-latest
