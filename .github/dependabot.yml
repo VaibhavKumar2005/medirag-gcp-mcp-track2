@@ -1,9 +1,0 @@
-version: 2
-updates:
-  - package-ecosystem: pip
-    directory: /apps/backend
-    schedule:
-      interval: weekly
-    ignore:
-      - dependency-name: black
-        versions: ["26.x"]
