@@ -1,8 +1,0 @@
-# Local development only — never install this in Cloud Build or production containers.
-# Usage: pip install -r requirements-dev.txt
-#
-# These packages require a running Docker socket and are incompatible with
-# Cloud Build environments. They also conflict with pydantic>=2.x in requirements.txt.
-
-docker==7.0.0
-docker-compose==1.29.2

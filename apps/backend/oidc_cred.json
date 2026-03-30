@@ -1,9 +1,0 @@
-{
-  "description": "OIDC trust for GitHub Actions",
-  "audiences": [
-    "api://AzureADTokenExchange"
-  ],
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:VaibhavKumar2005/cloud-native-ai-library-system:ref:refs/heads/main",
-  "name": "github-verirag-oidc"
-}

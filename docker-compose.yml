@@ -1,55 +1,14 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  rag-db:
-    image: pgvector/pgvector:pg16
-    container_name: rag-db
-    environment:
-      POSTGRES_USER:     "${POSTGRES_USER:-admin}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-devpassword}"
-      POSTGRES_DB:       "${POSTGRES_DB:-medirag_db}"
-    ports:
-      - "5432:5432"
+  medisearch-mcp:
+    image: python:3.11-slim
+    container_name: medisearch-mcp
+    working_dir: /app
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-medirag_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  rag-backend:
-    build: ./apps/backend
-    container_name: rag-backend
+      - ./medisearch/mcp-server:/app
     command: >
-      sh -c 'python manage.py migrate --no-input &&
-             python setup_pgvector.py &&
-             uvicorn mcp_server:app --host 0.0.0.0 --port 8000'
-    volumes:
-      - ./apps/backend:/app
-      - media_data:/app/media
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             uvicorn main:app --host 0.0.0.0 --port 8080"
     ports:
-      - "8000:8000"
-    env_file: .env
-    environment:
-      - DJANGO_SETTINGS_MODULE=rag_backend.settings
-      - DEBUG=True
-      - POSTGRES_HOST=rag-db
-    depends_on:
-      rag-db:
-        condition: service_healthy
-
-  rag-frontend:
-    build:
-      context: ./apps/frontend
-      args:
-        VITE_API_URL: http://localhost:8000
-    container_name: rag-frontend
-    ports:
-      - "5173:8080"
-    depends_on:
-      - rag-backend
-
-volumes:
-  postgres_data:
-  media_data:
+      - "8080:8080"
