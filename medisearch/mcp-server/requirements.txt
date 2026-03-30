@@ -1,4 +1,5 @@
+-c ../../requirements.txt
 fastapi
-uvicorn
+uvicorn[standard]
 fastmcp
 httpx

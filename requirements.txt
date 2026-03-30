@@ -1,0 +1,8 @@
+# Canonical dependency locks for the simplified MCP + ADK architecture.
+# Sources checked on Mar 31, 2026 from PyPI release history pages.
+
+fastapi==0.135.1
+uvicorn==0.41.0
+httpx==0.28.1
+fastmcp==3.1.1
+google-adk==1.28.0

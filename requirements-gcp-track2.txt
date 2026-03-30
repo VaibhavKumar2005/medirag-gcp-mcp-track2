@@ -1,7 +1,5 @@
-# Minimal dependencies for the simplified Track 2 architecture.
-# Install service-specific requirements from each folder:
-#   pip install -r medisearch/mcp-server/requirements.txt
-#   pip install -r medisearch/agent/requirements.txt
+# GCP Track 2 dependency entrypoint.
+# Uses the canonical locks in requirements.txt, then installs both services.
 
 -r medisearch/mcp-server/requirements.txt
 -r medisearch/agent/requirements.txt
