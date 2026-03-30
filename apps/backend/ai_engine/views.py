@@ -25,7 +25,7 @@ from datetime import datetime
 
 from ai_engine.models import Document
 from ai_engine.serializers import DocumentSerializer
-from ai_engine.tasks import ingest_document_task
+#from ai_engine.tasks import ingest_document_task
 from ai_engine.rag_logic import get_verified_answer
 from ai_engine.costops import get_cost_tracker
 from ai_engine.qualityops import get_quality_gate

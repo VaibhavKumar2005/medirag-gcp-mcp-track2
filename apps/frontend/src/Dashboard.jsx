@@ -51,7 +51,7 @@ function ScoreBar({ score }) {
 
 const UPLOAD_META = [
   { key:'uploading',   label:'Uploading PDF',        sub:'Encrypted transfer' },
-  { key:'processing',  label:'Celery extraction',     sub:'PyPDF text parsing' },
+  { key:'processing',  label:'Text extraction',     sub:'PyPDF text parsing' },
   { key:'vectorizing', label:'Generating embeddings', sub:'text-embedding-004 · 768d' },
   { key:'indexed',     label:'Indexed in pgvector',   sub:'Ready for semantic search' },
 ]
