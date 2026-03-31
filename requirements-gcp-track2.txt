@@ -1,6 +1,3 @@
-# GCP Track 2 dependency entrypoint.
-# Uses the canonical locks in requirements.txt, then installs both services.
-
+# GCP Track 2 install entrypoint.
 -r medisearch/mcp-server/requirements.txt
 -r medisearch/agent/requirements.txt
-# sync update 2026-03-31
