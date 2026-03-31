@@ -4,3 +4,4 @@
 google-adk>=1.0.0
 google-generativeai>=0.8.0
 httpx>=0.25.0
+# sync update 2026-03-31

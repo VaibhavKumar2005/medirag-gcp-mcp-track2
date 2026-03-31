@@ -2,3 +2,4 @@
 google-adk
 fastapi
 uvicorn[standard]
+# sync update 2026-03-31

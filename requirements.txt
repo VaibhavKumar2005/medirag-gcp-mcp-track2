@@ -6,3 +6,4 @@ uvicorn==0.41.0
 httpx==0.28.1
 fastmcp==3.1.1
 google-adk==1.28.0
+# sync update 2026-03-31
