@@ -1,25 +1,8 @@
-# MediRAG ADK Agent — Cloud Run requirements
-# Strictly minimal: only what verirag_adk_agent.py imports at runtime.
-#
-# DO NOT add Django, Celery, psycopg2, or any backend deps here.
-# DO NOT add docker or docker-compose — they require a Docker socket
-# (unavailable inside Cloud Build) and will crash the build.
-
-# Google Agent Development Kit
-google-adk>=0.1.0
-
-# Gemini SDK (ADK dependency; explicit pin avoids resolution conflicts)
-google-generativeai>=0.7.0
-
-# Web server — Cloud Run Dockerfile runs: uvicorn verirag_adk_agent:app
+# MediRAG ADK Agent - Cloud Run minimal runtime dependencies.
+google-adk>=1.0.0
+google-generativeai>=0.8.0
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
-
-# HTTP client (used internally by McpToolset for Streamable HTTP transport)
 httpx>=0.25.0
-
-# Data validation (FastAPI dependency)
 pydantic>=2.4.0
-
-# Structured logging for Cloud Run / Cloud Logging
-python-json-logger==2.0.7
+python-json-logger>=2.0.7
