@@ -1,4 +1,3 @@
--c ../../requirements.txt
 google-adk
 fastapi
-uvicorn[standard]
+uvicorn
